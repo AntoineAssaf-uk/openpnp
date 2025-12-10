@@ -1,0 +1,8 @@
+JAR generation:
+
+Eclipse
+Clean and Rebuild
+Project → Clean → select your project.
+Then Run As → Maven build… with goals clean install.
+This forces Eclipse to compile against the correct JDK libraries.
+

@@ -75,7 +75,7 @@
       <splashScreen bitmapFile="./logo/OpenPnP-logo.iconset/icon_128x128.png" />
       <java mainClass="org.openpnp.Main" vmParameters="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.desktop/java.awt=ALL-UNNAMED --add-opens=java.desktop/java.awt.color=ALL-UNNAMED">
         <classPath>
-          <archive location="openpnp-gui-0.0.1-alpha-SNAPSHOT.jar" failOnError="false" />
+          <archive location="WMS_OpenPnP.jar" failOnError="false" />
           <scanDirectory location="lib" failOnError="false" />
         </classPath>
         <nativeLibraryDirectories>
