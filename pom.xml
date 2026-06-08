@@ -13,7 +13,7 @@
 	</scm>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<maven.build.timestamp.format>yyyy-MM-dd_HH-mm-ss</maven.build.timestamp.format>
+		<maven.build.timestamp.format>dd-MM-yyyy HH-mm-ss</maven.build.timestamp.format>
 		<openpnp.version>${maven.build.timestamp}.${buildNumber}</openpnp.version>
 	</properties>
 	<dependencies>
@@ -248,6 +248,17 @@
         </dependency>
 	</dependencies>
 	<build>
+		<resources>
+		  <resource>
+			<directory>src/main/resources</directory>
+			<filtering>false</filtering>
+		  </resource>
+		  <resource>
+			<directory>src/main/filtered-resources</directory>
+			<filtering>true</filtering>
+		  </resource>
+		</resources>
+
 		<plugins>
 			<!-- Used to specify that the Maven Eclipse task should download sources
 				and JavaDocs and attach them to the Eclipse project. -->

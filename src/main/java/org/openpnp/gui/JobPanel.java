@@ -68,6 +68,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
 
+import org.openpnp.BuildInfo;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.Translations;
 import org.openpnp.events.DefinitionStructureChangedEvent;
@@ -819,14 +820,15 @@ public class JobPanel extends JPanel {
         }
     }
 
-    private void updateTitle() {
-        String title = String.format("OpenPnP - %s%s", job.isDirty() ? "*" : "", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName()));
-        mainFrame.setTitle(title);
-        if (jobViewer != null) {
-            jobViewer.setTitle(title);
-        }
+ private void updateTitle() {
+    String title = String.format("%s - %s%s", BuildInfo.getWindowTitle(), job.isDirty() ? "*" : "",
+            (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName()));
+    mainFrame.setTitle(title);
+
+    if (jobViewer != null) {
+        jobViewer.setTitle(title);
     }
+}
     
     private boolean checkJobStopped() {
         if (state != State.Stopped) {

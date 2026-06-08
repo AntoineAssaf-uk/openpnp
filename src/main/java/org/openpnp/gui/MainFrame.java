@@ -77,7 +77,7 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.undo.UndoManager;
-
+import org.openpnp.BuildInfo;
 import org.openpnp.Main;
 import org.openpnp.Translations;
 import org.openpnp.gui.components.CameraPanel;
@@ -296,6 +296,7 @@ public class MainFrame extends JFrame {
         HeadCellValue.setConfiguration(configuration);
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        setTitle(BuildInfo.getWindowTitle());
 
         // Get handlers for Mac application menu in place.
         boolean macOsXMenus = registerForMacOSXEvents();
