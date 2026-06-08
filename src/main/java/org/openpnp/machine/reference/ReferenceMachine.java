@@ -82,6 +82,7 @@ import org.openpnp.machine.reference.psh.AxesPropertySheetHolder;
 import org.openpnp.machine.reference.psh.CamerasPropertySheetHolder;
 import org.openpnp.machine.reference.psh.DriversPropertySheetHolder;
 import org.openpnp.machine.reference.psh.NozzleTipsPropertySheetHolder;
+import org.openpnp.machine.reference.psh.ReferencePositionsPropertySheetHolder;
 import org.openpnp.machine.reference.psh.SignalersPropertySheetHolder;
 import org.openpnp.machine.reference.signaler.ActuatorSignaler;
 import org.openpnp.machine.reference.signaler.SoundSignaler;
@@ -380,12 +381,13 @@ public class ReferenceMachine extends AbstractMachine {
         children.add(new NozzleTipsPropertySheetHolder(Translations.getString(
                 "ReferenceMachine.PropertySheetHolder.NozzleTips.title"), //$NON-NLS-1$
                 getNozzleTips(), null));
-        children.add(new CamerasPropertySheetHolder(null, Translations.getString(
-                "ReferenceMachine.PropertySheetHolder.Cameras.title"), getCameras(), null)); //$NON-NLS-1$
-        children.add(new ActuatorsPropertySheetHolder(null, Translations.getString(
-                "ReferenceMachine.PropertySheetHolder.Actuators.title"), getActuators(), null)); //$NON-NLS-1$
-        children.add(new DriversPropertySheetHolder(this, Translations.getString(
-                "ReferenceMachine.PropertySheetHolder.Drivers.title"), getDrivers(), null)); //$NON-NLS-1$
+       children.add(new CamerasPropertySheetHolder(null, Translations.getString(
+        "ReferenceMachine.PropertySheetHolder.Cameras.title"), getCameras(), null)); //$NON-NLS-1$
+children.add(new ReferencePositionsPropertySheetHolder());
+children.add(new ActuatorsPropertySheetHolder(null, Translations.getString(
+        "ReferenceMachine.PropertySheetHolder.Actuators.title"), getActuators(), null)); //$NON-NLS-1$
+children.add(new DriversPropertySheetHolder(this, Translations.getString(
+        "ReferenceMachine.PropertySheetHolder.Drivers.title"), getDrivers(), null)); //$NON-NLS-1$
         children.add(new SimplePropertySheetHolder(Translations.getString(
                 "ReferenceMachine.PropertySheetHolder.JobProcessors.title"), Arrays.asList(getPnpJobProcessor()))); //$NON-NLS-1$
 
