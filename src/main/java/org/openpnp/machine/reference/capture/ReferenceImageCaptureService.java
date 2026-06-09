@@ -24,74 +24,78 @@ public final class ReferenceImageCaptureService {
     private static final String BOTTOM_CAMERA_NAME = "OpenPnpCaptureCamera Bottom";
     private static final String NOZZLE_1_NAME = "ReferenceNozzle N1";
     private static final String NOZZLE_2_NAME = "ReferenceNozzle N2";
+    private static final int[] MONO_CROP_SIZES = { 1024, 512, 256 };
 
     private ReferenceImageCaptureService() {
     }
 
     public static CaptureResult captureAndSaveReferenceImages(String optionalFolderName) throws Exception {
-    Machine machine = Configuration.get().getMachine();
+        Machine machine = Configuration.get().getMachine();
 
-    if (machine == null) {
-        throw new Exception("No OpenPnP machine configuration is loaded.");
+        if (machine == null) {
+            throw new Exception("No OpenPnP machine configuration is loaded.");
+        }
+
+        if (!machine.isEnabled()) {
+            throw new Exception("Machine is not enabled. Enable the machine before capturing reference images.");
+        }
+
+        if (!machine.isHomed()) {
+            throw new Exception("Machine is not homed. Home the machine before capturing reference images.");
+        }
+
+        Head topHead = findHead(machine, TOP_HEAD_NAME);
+        Camera topCamera = findTopCamera(topHead);
+        Camera bottomCamera = findMachineCamera(machine, BOTTOM_CAMERA_NAME);
+        Nozzle nozzle1 = findNozzle(topHead, NOZZLE_1_NAME);
+        Nozzle nozzle2 = findNozzle(topHead, NOZZLE_2_NAME);
+
+        Location topLocation = topCamera.getLocation();
+        Location nozzle1Location = nozzle1.getLocation();
+        Location nozzle2Location = nozzle2.getLocation();
+
+        double topX = topLocation.getX();
+        double topY = topLocation.getY();
+        double nozzle1Z = nozzle1Location.getZ();
+        double nozzle2Z = nozzle2Location.getZ();
+
+        String folderName = buildReferenceFolderName(topX, topY, optionalFolderName);
+        Path outputFolder = REFERENCE_IMAGE_FOLDER.resolve(folderName);
+
+        Files.createDirectories(outputFolder);
+
+        BufferedImage topImage = topCamera.lightSettleAndCapture();
+        BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
+
+        String topOriginalFileName = buildOriginalImageFileName("Top", nozzle1Z, nozzle2Z);
+        String bottomOriginalFileName = buildOriginalImageFileName("Bot", nozzle1Z, nozzle2Z);
+
+        String topMonoFileName = buildMonoImageFileName("Top", nozzle1Z, nozzle2Z);
+        String bottomMonoFileName = buildMonoImageFileName("Bot", nozzle1Z, nozzle2Z);
+
+        Path topOriginalFile = outputFolder.resolve(topOriginalFileName);
+        Path bottomOriginalFile = outputFolder.resolve(bottomOriginalFileName);
+        Path topMonoFile = outputFolder.resolve(topMonoFileName);
+        Path bottomMonoFile = outputFolder.resolve(bottomMonoFileName);
+
+        saveBmp(topImage, topOriginalFile);
+        saveBmp(bottomImage, bottomOriginalFile);
+
+        BufferedImage topMonoImage = createGrayscaleLuminosityImage(topImage);
+        BufferedImage bottomMonoImage = createGrayscaleLuminosityImage(bottomImage);
+
+        saveBmp(topMonoImage, topMonoFile);
+        saveBmp(bottomMonoImage, bottomMonoFile);
+
+        saveMonoCrops(topMonoImage, outputFolder, "Top", nozzle1Z, nozzle2Z);
+        saveMonoCrops(bottomMonoImage, outputFolder, "Bot", nozzle1Z, nozzle2Z);
+
+        return new CaptureResult(folderName, outputFolder, topOriginalFile, bottomOriginalFile, topMonoFile,
+                bottomMonoFile);
     }
 
-    if (!machine.isEnabled()) {
-        throw new Exception("Machine is not enabled. Enable the machine before capturing reference images.");
-    }
-
-    if (!machine.isHomed()) {
-        throw new Exception("Machine is not homed. Home the machine before capturing reference images.");
-    }
-
-    Head topHead = findHead(machine, TOP_HEAD_NAME);
-    Camera topCamera = findTopCamera(topHead);
-    Camera bottomCamera = findMachineCamera(machine, BOTTOM_CAMERA_NAME);
-    Nozzle nozzle1 = findNozzle(topHead, NOZZLE_1_NAME);
-    Nozzle nozzle2 = findNozzle(topHead, NOZZLE_2_NAME);
-
-    Location topLocation = topCamera.getLocation();
-    Location nozzle1Location = nozzle1.getLocation();
-    Location nozzle2Location = nozzle2.getLocation();
-
-    double topX = topLocation.getX();
-    double topY = topLocation.getY();
-    double nozzle1Z = nozzle1Location.getZ();
-    double nozzle2Z = nozzle2Location.getZ();
-
-    String folderName = buildReferenceFolderName(topX, topY, optionalFolderName);
-    Path outputFolder = REFERENCE_IMAGE_FOLDER.resolve(folderName);
-
-    Files.createDirectories(outputFolder);
-
-    BufferedImage topImage = topCamera.lightSettleAndCapture();
-    BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
-
-    String topOriginalFileName = buildOriginalImageFileName("Top", nozzle1Z, nozzle2Z);
-    String bottomOriginalFileName = buildOriginalImageFileName("Bot", nozzle1Z, nozzle2Z);
-
-    String topMonoFileName = buildMonoImageFileName("Top", nozzle1Z, nozzle2Z);
-    String bottomMonoFileName = buildMonoImageFileName("Bot", nozzle1Z, nozzle2Z);
-
-    Path topOriginalFile = outputFolder.resolve(topOriginalFileName);
-    Path bottomOriginalFile = outputFolder.resolve(bottomOriginalFileName);
-    Path topMonoFile = outputFolder.resolve(topMonoFileName);
-    Path bottomMonoFile = outputFolder.resolve(bottomMonoFileName);
-
-    saveBmp(topImage, topOriginalFile);
-    saveBmp(bottomImage, bottomOriginalFile);
-
-    BufferedImage topMonoImage = createGrayscaleLuminosityImage(topImage);
-    BufferedImage bottomMonoImage = createGrayscaleLuminosityImage(bottomImage);
-
-    saveBmp(topMonoImage, topMonoFile);
-    saveBmp(bottomMonoImage, bottomMonoFile);
-
-    return new CaptureResult(folderName, outputFolder, topOriginalFile, bottomOriginalFile, topMonoFile,
-            bottomMonoFile);
-}
-
-public static CaptureResult captureAndSaveOriginalReferenceImages(String optionalFolderName) throws Exception {
-    return captureAndSaveReferenceImages(optionalFolderName);
+    public static CaptureResult captureAndSaveOriginalReferenceImages(String optionalFolderName) throws Exception {
+        return captureAndSaveReferenceImages(optionalFolderName);
 }
 
     public static String buildReferenceFolderName(double x, double y, String optionalFolderName) {
@@ -113,11 +117,20 @@ public static CaptureResult captureAndSaveOriginalReferenceImages(String optiona
     }
 
     public static String buildMonoImageFileName(String prefix, double nozzle1Z, double nozzle2Z) {
-    return String.format(Locale.US,
+        return String.format(Locale.US,
             "%s_N1_%s_N2_%s_Mono.bmp",
             prefix,
             formatZ(nozzle1Z),
             formatZ(nozzle2Z));
+    }
+
+    public static String buildMonoCropImageFileName(String prefix, double nozzle1Z, double nozzle2Z, int cropSize) {
+        return String.format(Locale.US,
+                "%s_N1_%s_N2_%s_Mono_Crop_%d.bmp",
+                prefix,
+                formatZ(nozzle1Z),
+                formatZ(nozzle2Z),
+                cropSize);
     }
 
     public static String formatCoordinate(double value) {
@@ -167,6 +180,50 @@ public static CaptureResult captureAndSaveOriginalReferenceImages(String optiona
         int b = rgb & 0xff;
 
         return (299 * r + 587 * g + 114 * b + 500) / 1000;
+    }
+    public static BufferedImage cropCentered(BufferedImage source, int cropSize) {
+        if (source == null) {
+            return null;
+        }
+
+        int originX = (source.getWidth() - cropSize) / 2;
+        int originY = (source.getHeight() - cropSize) / 2;
+
+        if (originX < 0 || originY < 0) {
+            return null;
+        }
+
+        BufferedImage croppedImage = new BufferedImage(cropSize, cropSize, BufferedImage.TYPE_BYTE_GRAY);
+        WritableRaster sourceRaster = source.getRaster();
+        WritableRaster croppedRaster = croppedImage.getRaster();
+
+        for (int y = 0; y < cropSize; y++) {
+            for (int x = 0; x < cropSize; x++) {
+                int gray = sourceRaster.getSample(originX + x, originY + y, 0);
+                croppedRaster.setSample(x, y, 0, gray);
+            }
+        }
+
+        return croppedImage;
+    }
+
+    private static void saveBmpIfNotNull(BufferedImage image, Path file) throws Exception {
+        if (image == null) {
+            return;
+        }
+
+        saveBmp(image, file);
+    }
+    private static void saveMonoCrops(BufferedImage monoImage, Path outputFolder, String prefix,
+            double nozzle1Z, double nozzle2Z) throws Exception {
+        for (int cropSize : MONO_CROP_SIZES) {
+            BufferedImage cropImage = cropCentered(monoImage, cropSize);
+
+            String cropFileName = buildMonoCropImageFileName(prefix, nozzle1Z, nozzle2Z, cropSize);
+            Path cropFile = outputFolder.resolve(cropFileName);
+
+            saveBmpIfNotNull(cropImage, cropFile);
+        }
     }
     private static void saveBmp(BufferedImage image, Path file) throws Exception {
         if (image == null) {
