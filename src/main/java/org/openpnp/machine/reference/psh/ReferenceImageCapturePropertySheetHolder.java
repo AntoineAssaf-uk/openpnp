@@ -147,7 +147,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             String optionalFolderName = optionalFolderNameTextField.getText();
 
             UiUtils.submitUiMachineTask(() -> {
-                return ReferenceImageCaptureService.captureAndSaveOriginalReferenceImages(optionalFolderName);
+                return ReferenceImageCaptureService.captureAndSaveReferenceImages(optionalFolderName);
             }, (CaptureResult result) -> {
                 imageCaptureButton.setEnabled(true);
                 optionalFolderNameTextField.setText("");

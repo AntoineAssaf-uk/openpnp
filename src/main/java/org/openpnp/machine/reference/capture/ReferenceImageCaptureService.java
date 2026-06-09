@@ -1,6 +1,7 @@
 package org.openpnp.machine.reference.capture;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,55 +28,70 @@ public final class ReferenceImageCaptureService {
     private ReferenceImageCaptureService() {
     }
 
-    public static CaptureResult captureAndSaveOriginalReferenceImages(String optionalFolderName) throws Exception {
-        Machine machine = Configuration.get().getMachine();
+    public static CaptureResult captureAndSaveReferenceImages(String optionalFolderName) throws Exception {
+    Machine machine = Configuration.get().getMachine();
 
-        if (machine == null) {
-            throw new Exception("No OpenPnP machine configuration is loaded.");
-        }
-
-        if (!machine.isEnabled()) {
-            throw new Exception("Machine is not enabled. Enable the machine before capturing reference images.");
-        }
-
-        if (!machine.isHomed()) {
-            throw new Exception("Machine is not homed. Home the machine before capturing reference images.");
-        }
-
-        Head topHead = findHead(machine, TOP_HEAD_NAME);
-        Camera topCamera = findTopCamera(topHead);
-        Camera bottomCamera = findMachineCamera(machine, BOTTOM_CAMERA_NAME);
-        Nozzle nozzle1 = findNozzle(topHead, NOZZLE_1_NAME);
-        Nozzle nozzle2 = findNozzle(topHead, NOZZLE_2_NAME);
-
-        Location topLocation = topCamera.getLocation();
-        Location nozzle1Location = nozzle1.getLocation();
-        Location nozzle2Location = nozzle2.getLocation();
-
-        double topX = topLocation.getX();
-        double topY = topLocation.getY();
-        double nozzle1Z = nozzle1Location.getZ();
-        double nozzle2Z = nozzle2Location.getZ();
-
-        String folderName = buildReferenceFolderName(topX, topY, optionalFolderName);
-        Path outputFolder = REFERENCE_IMAGE_FOLDER.resolve(folderName);
-
-        Files.createDirectories(outputFolder);
-
-        BufferedImage topImage = topCamera.lightSettleAndCapture();
-        BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
-
-        String topFileName = buildOriginalImageFileName("Top", nozzle1Z, nozzle2Z);
-        String bottomFileName = buildOriginalImageFileName("Bot", nozzle1Z, nozzle2Z);
-
-        Path topFile = outputFolder.resolve(topFileName);
-        Path bottomFile = outputFolder.resolve(bottomFileName);
-
-        saveBmp(topImage, topFile);
-        saveBmp(bottomImage, bottomFile);
-
-        return new CaptureResult(folderName, outputFolder, topFile, bottomFile);
+    if (machine == null) {
+        throw new Exception("No OpenPnP machine configuration is loaded.");
     }
+
+    if (!machine.isEnabled()) {
+        throw new Exception("Machine is not enabled. Enable the machine before capturing reference images.");
+    }
+
+    if (!machine.isHomed()) {
+        throw new Exception("Machine is not homed. Home the machine before capturing reference images.");
+    }
+
+    Head topHead = findHead(machine, TOP_HEAD_NAME);
+    Camera topCamera = findTopCamera(topHead);
+    Camera bottomCamera = findMachineCamera(machine, BOTTOM_CAMERA_NAME);
+    Nozzle nozzle1 = findNozzle(topHead, NOZZLE_1_NAME);
+    Nozzle nozzle2 = findNozzle(topHead, NOZZLE_2_NAME);
+
+    Location topLocation = topCamera.getLocation();
+    Location nozzle1Location = nozzle1.getLocation();
+    Location nozzle2Location = nozzle2.getLocation();
+
+    double topX = topLocation.getX();
+    double topY = topLocation.getY();
+    double nozzle1Z = nozzle1Location.getZ();
+    double nozzle2Z = nozzle2Location.getZ();
+
+    String folderName = buildReferenceFolderName(topX, topY, optionalFolderName);
+    Path outputFolder = REFERENCE_IMAGE_FOLDER.resolve(folderName);
+
+    Files.createDirectories(outputFolder);
+
+    BufferedImage topImage = topCamera.lightSettleAndCapture();
+    BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
+
+    BufferedImage topMonoImage = createGrayscaleLuminosityImage(topImage);
+    BufferedImage bottomMonoImage = createGrayscaleLuminosityImage(bottomImage);
+
+    String topOriginalFileName = buildOriginalImageFileName("Top", nozzle1Z, nozzle2Z);
+    String bottomOriginalFileName = buildOriginalImageFileName("Bot", nozzle1Z, nozzle2Z);
+
+    String topMonoFileName = buildMonoImageFileName("Top", nozzle1Z, nozzle2Z);
+    String bottomMonoFileName = buildMonoImageFileName("Bot", nozzle1Z, nozzle2Z);
+
+    Path topOriginalFile = outputFolder.resolve(topOriginalFileName);
+    Path bottomOriginalFile = outputFolder.resolve(bottomOriginalFileName);
+    Path topMonoFile = outputFolder.resolve(topMonoFileName);
+    Path bottomMonoFile = outputFolder.resolve(bottomMonoFileName);
+
+    saveBmp(topImage, topOriginalFile);
+    saveBmp(bottomImage, bottomOriginalFile);
+    saveBmp(topMonoImage, topMonoFile);
+    saveBmp(bottomMonoImage, bottomMonoFile);
+
+    return new CaptureResult(folderName, outputFolder, topOriginalFile, bottomOriginalFile, topMonoFile,
+            bottomMonoFile);
+}
+
+public static CaptureResult captureAndSaveOriginalReferenceImages(String optionalFolderName) throws Exception {
+    return captureAndSaveReferenceImages(optionalFolderName);
+}
 
     public static String buildReferenceFolderName(double x, double y, String optionalFolderName) {
         String suffix = sanitizeFolderSuffix(optionalFolderName);
@@ -93,6 +109,14 @@ public final class ReferenceImageCaptureService {
                 prefix,
                 formatZ(nozzle1Z),
                 formatZ(nozzle2Z));
+    }
+
+    public static String buildMonoImageFileName(String prefix, double nozzle1Z, double nozzle2Z) {
+    return String.format(Locale.US,
+            "%s_N1_%s_N2_%s_Mono.bmp",
+            prefix,
+            formatZ(nozzle1Z),
+            formatZ(nozzle2Z));
     }
 
     public static String formatCoordinate(double value) {
@@ -118,7 +142,31 @@ public final class ReferenceImageCaptureService {
 
         return sanitized;
     }
+        public static BufferedImage createGrayscaleLuminosityImage(BufferedImage source) throws Exception {
+        if (source == null) {
+            throw new Exception("Cannot create grayscale image because source image is null.");
+        }
 
+        BufferedImage grayscaleImage = new BufferedImage(source.getWidth(), source.getHeight(),
+                BufferedImage.TYPE_BYTE_GRAY);
+        WritableRaster raster = grayscaleImage.getRaster();
+
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                raster.setSample(x, y, 0, toGrayscaleLuminosity(source.getRGB(x, y)));
+            }
+        }
+
+        return grayscaleImage;
+    }
+
+    private static int toGrayscaleLuminosity(int rgb) {
+        int r = (rgb >> 16) & 0xff;
+        int g = (rgb >> 8) & 0xff;
+        int b = rgb & 0xff;
+
+        return (299 * r + 587 * g + 114 * b + 500) / 1000;
+    }
     private static void saveBmp(BufferedImage image, Path file) throws Exception {
         if (image == null) {
             throw new Exception("Cannot save BMP file because captured image is null: " + file);
@@ -284,17 +332,22 @@ public final class ReferenceImageCaptureService {
         return name.replaceAll("\\s+", "").toLowerCase(Locale.US);
     }
 
-    public static final class CaptureResult {
+        public static final class CaptureResult {
         private final String folderName;
         private final Path folder;
         private final Path topOriginalFile;
         private final Path bottomOriginalFile;
+        private final Path topMonoFile;
+        private final Path bottomMonoFile;
 
-        private CaptureResult(String folderName, Path folder, Path topOriginalFile, Path bottomOriginalFile) {
+        private CaptureResult(String folderName, Path folder, Path topOriginalFile, Path bottomOriginalFile,
+                Path topMonoFile, Path bottomMonoFile) {
             this.folderName = folderName;
             this.folder = folder;
             this.topOriginalFile = topOriginalFile;
             this.bottomOriginalFile = bottomOriginalFile;
+            this.topMonoFile = topMonoFile;
+            this.bottomMonoFile = bottomMonoFile;
         }
 
         public String getFolderName() {
@@ -311,6 +364,14 @@ public final class ReferenceImageCaptureService {
 
         public Path getBottomOriginalFile() {
             return bottomOriginalFile;
+        }
+
+        public Path getTopMonoFile() {
+            return topMonoFile;
+        }
+
+        public Path getBottomMonoFile() {
+            return bottomMonoFile;
         }
     }
 }
