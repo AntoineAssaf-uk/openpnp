@@ -76,10 +76,10 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         panel.setBorder(new EmptyBorder(12, 12, 12, 12));
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
-        JLabel savedOkLabel = new JLabel("");
+        JLabel savedOkLabel = new JLabel(" ");
         savedOkLabel.setForeground(new Color(0, 128, 0));
         savedOkLabel.setFont(savedOkLabel.getFont().deriveFont(Font.BOLD));
-        savedOkLabel.setVisible(false);
+        savedOkLabel.setVisible(true);
 
                 JTextField optionalFolderNameTextField = new JTextField(32);
         Dimension optionalFolderNameTextFieldSize = optionalFolderNameTextField.getPreferredSize();
@@ -114,15 +114,25 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         messageConstraints.anchor = GridBagConstraints.WEST;
         messageConstraints.insets = new Insets(4, 0, 0, 0);
 
-        optionalFolderNamePanel.add(savedOkLabel, messageConstraints);
+        
+        Dimension optionalFolderNamePanelSize = optionalFolderNamePanel.getPreferredSize();
+
+        optionalFolderNamePanel.setMinimumSize(optionalFolderNamePanelSize);
+        optionalFolderNamePanel.setPreferredSize(optionalFolderNamePanelSize);
+        optionalFolderNamePanel.setMaximumSize(optionalFolderNamePanelSize);
 
         JButton imageCaptureButton = new JButton("Image Capture");
         imageCaptureButton.setToolTipText("Image capture by camera");
         JPanel imageCaptureButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         imageCaptureButtonPanel.add(imageCaptureButton);
 
+        Dimension imageCaptureButtonPanelSize = imageCaptureButtonPanel.getPreferredSize();
+        imageCaptureButtonPanel.setMinimumSize(imageCaptureButtonPanelSize);
+        imageCaptureButtonPanel.setPreferredSize(imageCaptureButtonPanelSize);
+        imageCaptureButtonPanel.setMaximumSize(imageCaptureButtonPanelSize);
+
         imageCaptureButton.addActionListener((ActionEvent e) -> {
-            savedOkLabel.setVisible(false);
+            savedOkLabel.setText(" ");
             imageCaptureButton.setEnabled(false);
 
             String optionalFolderName = optionalFolderNameTextField.getText();
@@ -136,7 +146,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
                 savedOkLabel.setVisible(true);
             }, (throwable) -> {
                 imageCaptureButton.setEnabled(true);
-                savedOkLabel.setVisible(false);
+                savedOkLabel.setText(" ");
                 UiUtils.showError(throwable);
             });
         });
@@ -149,7 +159,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             @Override
             public void ancestorAdded(AncestorEvent event) {
                 optionalFolderNameTextField.setText("");
-                savedOkLabel.setVisible(false);
+                savedOkLabel.setText(" ");
             }
 
             @Override
