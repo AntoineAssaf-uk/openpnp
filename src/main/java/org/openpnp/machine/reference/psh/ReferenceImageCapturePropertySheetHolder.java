@@ -3,8 +3,13 @@ package org.openpnp.machine.reference.psh;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.image.BufferedImage;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Locale;
 
+import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Box;
@@ -31,6 +36,8 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
     private static final String BOTTOM_CAMERA_NAME = "OpenPnpCaptureCamera Bottom";
     private static final String NOZZLE_1_NAME = "ReferenceNozzle N1";
     private static final String NOZZLE_2_NAME = "ReferenceNozzle N2";
+    private static final Path TOP_IMAGE_FOLDER = Paths.get("C:\\", "Data", "Reference Images", "Top");
+    private static final Path BOTTOM_IMAGE_FOLDER = Paths.get("C:\\", "Data", "Reference Images", "Bottom");
 
     @Override
     public String getPropertySheetHolderTitle() {
@@ -86,8 +93,8 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             savedOkLabel.setVisible(false);
             imageCaptureButton.setEnabled(false);
 
-            UiUtils.submitUiMachineTask(() -> {
-                validateCaptureSetup();
+           UiUtils.submitUiMachineTask(() -> {
+                captureAndSaveOriginalReferenceImages();
                 return null;
             }, (result) -> {
                 imageCaptureButton.setEnabled(true);
@@ -142,7 +149,78 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         System.out.println(debugMessage);
     }
 
-  private Head findHead(Machine machine, String nameOrId) throws Exception {
+    private void captureAndSaveOriginalReferenceImages() throws Exception {
+    Machine machine = Configuration.get().getMachine();
+
+    if (machine == null) {
+        throw new Exception("No OpenPnP machine configuration is loaded.");
+    }
+
+    if (!machine.isEnabled()) {
+        throw new Exception("Machine is not enabled. Enable the machine before capturing reference images.");
+    }
+
+    if (!machine.isHomed()) {
+        throw new Exception("Machine is not homed. Home the machine before capturing reference images.");
+    }
+
+    Head topHead = findHead(machine, TOP_HEAD_NAME);
+    Camera topCamera = findTopCamera(topHead);
+    Camera bottomCamera = findMachineCamera(machine, BOTTOM_CAMERA_NAME);
+    Nozzle nozzle1 = findNozzle(topHead, NOZZLE_1_NAME);
+    Nozzle nozzle2 = findNozzle(topHead, NOZZLE_2_NAME);
+
+    Location topLocation = topCamera.getLocation();
+    Location nozzle1Location = nozzle1.getLocation();
+    Location nozzle2Location = nozzle2.getLocation();
+
+    double topX = topLocation.getX();
+    double topY = topLocation.getY();
+    double nozzle1Z = nozzle1Location.getZ();
+    double nozzle2Z = nozzle2Location.getZ();
+
+    Files.createDirectories(TOP_IMAGE_FOLDER);
+    Files.createDirectories(BOTTOM_IMAGE_FOLDER);
+
+    BufferedImage topImage = topCamera.lightSettleAndCapture();
+    BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
+
+    String topFileName = buildImageFileName("Top", topX, topY, nozzle1Z, nozzle2Z, "");
+    String bottomFileName = buildImageFileName("Bottom", topX, topY, nozzle1Z, nozzle2Z, "");
+
+    saveBmp(topImage, TOP_IMAGE_FOLDER.resolve(topFileName));
+    saveBmp(bottomImage, BOTTOM_IMAGE_FOLDER.resolve(bottomFileName));
+
+    System.out.println(String.format(Locale.US,
+            "Reference images saved. Top=%s, Bottom=%s",
+            TOP_IMAGE_FOLDER.resolve(topFileName),
+            BOTTOM_IMAGE_FOLDER.resolve(bottomFileName)));
+    }
+    private String buildImageFileName(String prefix, double x, double y, double nozzle1Z, double nozzle2Z,
+        String suffix) {
+    return String.format(Locale.US,
+            "%s_X%.3f_Y%.3f_N1_Z%.3f_N2_Z%.3f%s.bmp",
+            prefix,
+            x,
+            y,
+            nozzle1Z,
+            nozzle2Z,
+            suffix);
+}
+
+    private void saveBmp(BufferedImage image, Path file) throws Exception {
+        if (image == null) {
+            throw new Exception("Cannot save BMP file because captured image is null: " + file);
+        }
+
+        boolean ok = ImageIO.write(image, "bmp", file.toFile());
+
+        if (!ok) {
+            throw new Exception("No BMP image writer is available for file: " + file);
+        }
+    }
+
+    private Head findHead(Machine machine, String nameOrId) throws Exception {
     StringBuilder availableHeads = new StringBuilder();
 
     for (Head head : machine.getHeads()) {
