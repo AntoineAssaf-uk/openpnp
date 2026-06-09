@@ -1,7 +1,7 @@
 package org.openpnp.machine.reference.capture;
 
 import java.awt.image.BufferedImage;
-import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -66,9 +66,6 @@ public final class ReferenceImageCaptureService {
     BufferedImage topImage = topCamera.lightSettleAndCapture();
     BufferedImage bottomImage = bottomCamera.lightSettleAndCapture();
 
-    BufferedImage topMonoImage = createGrayscaleLuminosityImage(topImage);
-    BufferedImage bottomMonoImage = createGrayscaleLuminosityImage(bottomImage);
-
     String topOriginalFileName = buildOriginalImageFileName("Top", nozzle1Z, nozzle2Z);
     String bottomOriginalFileName = buildOriginalImageFileName("Bot", nozzle1Z, nozzle2Z);
 
@@ -82,6 +79,10 @@ public final class ReferenceImageCaptureService {
 
     saveBmp(topImage, topOriginalFile);
     saveBmp(bottomImage, bottomOriginalFile);
+
+    BufferedImage topMonoImage = createGrayscaleLuminosityImage(topImage);
+    BufferedImage bottomMonoImage = createGrayscaleLuminosityImage(bottomImage);
+
     saveBmp(topMonoImage, topMonoFile);
     saveBmp(bottomMonoImage, bottomMonoFile);
 
