@@ -114,12 +114,21 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         messageConstraints.anchor = GridBagConstraints.WEST;
         messageConstraints.insets = new Insets(4, 0, 0, 0);
 
-        
-        Dimension optionalFolderNamePanelSize = optionalFolderNamePanel.getPreferredSize();
+        optionalFolderNamePanel.add(savedOkLabel, messageConstraints);
 
+        GridBagConstraints fillerConstraints = new GridBagConstraints();
+        fillerConstraints.gridx = 2;
+        fillerConstraints.gridy = 0;
+        fillerConstraints.weightx = 1.0;
+        fillerConstraints.fill = GridBagConstraints.HORIZONTAL;
+
+        optionalFolderNamePanel.add(Box.createHorizontalGlue(), fillerConstraints);
+
+        Dimension optionalFolderNamePanelSize = optionalFolderNamePanel.getPreferredSize();
         optionalFolderNamePanel.setMinimumSize(optionalFolderNamePanelSize);
         optionalFolderNamePanel.setPreferredSize(optionalFolderNamePanelSize);
-        optionalFolderNamePanel.setMaximumSize(optionalFolderNamePanelSize);
+        optionalFolderNamePanel.setMaximumSize(
+                new Dimension(Integer.MAX_VALUE, optionalFolderNamePanelSize.height));
 
         JButton imageCaptureButton = new JButton("Image Capture");
         imageCaptureButton.setToolTipText("Image capture by camera");
