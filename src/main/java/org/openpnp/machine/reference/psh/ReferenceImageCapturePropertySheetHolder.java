@@ -24,11 +24,15 @@ import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
+import javax.swing.BorderFactory;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService;
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService.CaptureResult;
 import org.openpnp.spi.PropertySheetHolder;
 import org.openpnp.util.UiUtils;
+import org.openpnp.machine.reference.debug.ReferenceMachineDebugLog;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -80,6 +84,27 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         savedOkLabel.setForeground(new Color(0, 128, 0));
         savedOkLabel.setFont(savedOkLabel.getFont().deriveFont(Font.BOLD));
         savedOkLabel.setVisible(true);
+
+        JTextArea debugTextArea = new JTextArea(14, 90);
+        debugTextArea.setEditable(false);
+        debugTextArea.setLineWrap(false);
+        debugTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+        JScrollPane debugScrollPane = new JScrollPane(debugTextArea);
+        debugScrollPane.setBorder(BorderFactory.createTitledBorder("Debug log"));
+        debugScrollPane.setPreferredSize(new Dimension(760, 240));
+        debugScrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, 240));
+
+        JButton eraseLogsButton = new JButton("Erase logs");
+        eraseLogsButton.addActionListener((ActionEvent e) -> {
+            ReferenceMachineDebugLog.clear();
+        });
+
+        JPanel eraseLogsButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        eraseLogsButtonPanel.add(eraseLogsButton);
+
+        ReferenceMachineDebugLog.setTextArea(debugTextArea);
+        ReferenceMachineDebugLog.debugPrintf("Debug log panel ready.");
 
                 JTextField optionalFolderNameTextField = new JTextField(32);
         Dimension optionalFolderNameTextFieldSize = optionalFolderNameTextField.getPreferredSize();
@@ -141,28 +166,47 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         imageCaptureButtonPanel.setMaximumSize(imageCaptureButtonPanelSize);
 
         imageCaptureButton.addActionListener((ActionEvent e) -> {
+        savedOkLabel.setText(" ");
+        imageCaptureButton.setEnabled(false);
+
+        String optionalFolderName = optionalFolderNameTextField.getText();
+
+        ReferenceMachineDebugLog.debugPrintf("Image Capture pressed.");
+        ReferenceMachineDebugLog.debugPrintf("Optional Folder Name = \"%s\"", optionalFolderName);
+
+        UiUtils.submitUiMachineTask(() -> {
+            ReferenceMachineDebugLog.debugPrintf("Capture task started.");
+            return ReferenceImageCaptureService.captureAndSaveReferenceImages(optionalFolderName);
+        }, (CaptureResult result) -> {
+            imageCaptureButton.setEnabled(true);
+
+            optionalFolderNameTextField.setText("");
+
+            savedOkLabel.setText("Data saved in folder " + result.getFolderName());
+
+            savedOkLabel.setVisible(true);
+
+            ReferenceMachineDebugLog.debugPrintf("Capture task completed.");
+            ReferenceMachineDebugLog.debugPrintf("Data saved in folder %s", result.getFolderName());
+            ReferenceMachineDebugLog.debugPrintf("Output path: %s", result.getFolder());
+
+        }, (throwable) -> {
+            imageCaptureButton.setEnabled(true);
+
             savedOkLabel.setText(" ");
-            imageCaptureButton.setEnabled(false);
 
-            String optionalFolderName = optionalFolderNameTextField.getText();
+            ReferenceMachineDebugLog.debugException("Capture task failed", throwable);
 
-            UiUtils.submitUiMachineTask(() -> {
-                return ReferenceImageCaptureService.captureAndSaveReferenceImages(optionalFolderName);
-            }, (CaptureResult result) -> {
-                imageCaptureButton.setEnabled(true);
-                optionalFolderNameTextField.setText("");
-                savedOkLabel.setText("Data saved in folder " + result.getFolderName());
-                savedOkLabel.setVisible(true);
-            }, (throwable) -> {
-                imageCaptureButton.setEnabled(true);
-                savedOkLabel.setText(" ");
-                UiUtils.showError(throwable);
-            });
+            UiUtils.showError(throwable);
         });
-
+    });
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(optionalFolderNamePanel);
+        panel.add(Box.createVerticalStrut(28));
+        panel.add(debugScrollPane);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(eraseLogsButtonPanel);
 
         panel.addAncestorListener(new AncestorListener() {
             @Override
@@ -182,6 +226,8 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         
         imageCaptureButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         optionalFolderNamePanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
+        debugScrollPane.setAlignmentX(JPanel.LEFT_ALIGNMENT);
+        eraseLogsButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
 
         return panel;
     }
