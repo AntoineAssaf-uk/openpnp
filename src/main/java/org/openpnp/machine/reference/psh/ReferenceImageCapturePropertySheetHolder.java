@@ -8,6 +8,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.io.File;
 
 import javax.swing.Action;
 import javax.swing.Box;
@@ -27,12 +28,16 @@ import javax.swing.text.DocumentFilter;
 import javax.swing.BorderFactory;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService;
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService.CaptureResult;
 import org.openpnp.spi.PropertySheetHolder;
 import org.openpnp.util.UiUtils;
 import org.openpnp.machine.reference.debug.ReferenceMachineDebugLog;
+import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
+import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -200,9 +205,138 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
                 UiUtils.showError(throwable);
             });
         });
+        final File[] imageOffsetReferenceFile = new File[1];
+        final File[] imageOffsetCapturedFile = new File[1];
+
+        JTextField imageOffsetReferenceTextField = new JTextField(64);
+        imageOffsetReferenceTextField.setEditable(false);
+
+        JTextField imageOffsetCapturedTextField = new JTextField(64);
+        imageOffsetCapturedTextField.setEditable(false);
+
+        JButton imageOffsetReferenceBrowseButton = new JButton("Select Reference BMP");
+        JButton imageOffsetCapturedBrowseButton = new JButton("Select Captured BMP");
+        JButton imageOffsetTestButton = new JButton("Test Image Offset");
+
+        imageOffsetReferenceBrowseButton.addActionListener((ActionEvent e) -> {
+            File selectedFile = chooseBitmapFile(panel,
+                    imageOffsetReferenceFile[0] == null ? null : imageOffsetReferenceFile[0].getParentFile());
+
+            if (selectedFile != null) {
+                imageOffsetReferenceFile[0] = selectedFile;
+                imageOffsetReferenceTextField.setText(selectedFile.getAbsolutePath());
+                ReferenceMachineDebugLog.debugPrintf("Image offset reference file selected: %s",
+                        selectedFile.getAbsolutePath());
+            }
+        });
+
+        imageOffsetCapturedBrowseButton.addActionListener((ActionEvent e) -> {
+            File selectedFile = chooseBitmapFile(panel,
+                    imageOffsetCapturedFile[0] == null ? null : imageOffsetCapturedFile[0].getParentFile());
+
+            if (selectedFile != null) {
+                imageOffsetCapturedFile[0] = selectedFile;
+                imageOffsetCapturedTextField.setText(selectedFile.getAbsolutePath());
+                ReferenceMachineDebugLog.debugPrintf("Image offset captured file selected: %s",
+                        selectedFile.getAbsolutePath());
+            }
+        });
+
+        imageOffsetTestButton.addActionListener((ActionEvent e) -> {
+            if (imageOffsetReferenceFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Image offset test cancelled: no reference BMP selected.");
+                return;
+            }
+
+            if (imageOffsetCapturedFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Image offset test cancelled: no captured BMP selected.");
+                return;
+            }
+
+            imageOffsetTestButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Image offset test started.");
+            ReferenceMachineDebugLog.debugPrintf("Reference BMP: %s", imageOffsetReferenceFile[0].getAbsolutePath());
+            ReferenceMachineDebugLog.debugPrintf("Captured BMP:  %s", imageOffsetCapturedFile[0].getAbsolutePath());
+
+            UiUtils.submitUiMachineTask(() -> {
+                return ReferenceImageOffsetService.findOffset(imageOffsetReferenceFile[0], imageOffsetCapturedFile[0]);
+            }, (CsImageOffsetResult result) -> {
+                imageOffsetTestButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintf("Image offset test completed.");
+                ReferenceMachineDebugLog.debugPrintf("dx = %.6f pixels", result.getDx());
+                ReferenceMachineDebugLog.debugPrintf("dy = %.6f pixels", result.getDy());
+                ReferenceMachineDebugLog.debugPrintf("peak = %.9f", result.getPeak());
+                ReferenceMachineDebugLog.debugPrintf("dt = %d ms", result.getDt());
+            }, (throwable) -> {
+                imageOffsetTestButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Image offset test failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
+        JPanel imageOffsetTestPanel = new JPanel(new GridBagLayout());
+        imageOffsetTestPanel.setBorder(BorderFactory.createTitledBorder("Image Offset Test"));
+
+        GridBagConstraints offsetLabelConstraints = new GridBagConstraints();
+        offsetLabelConstraints.gridx = 0;
+        offsetLabelConstraints.gridy = 0;
+        offsetLabelConstraints.anchor = GridBagConstraints.WEST;
+        offsetLabelConstraints.insets = new Insets(0, 0, 4, 8);
+        imageOffsetTestPanel.add(new JLabel("Reference BMP"), offsetLabelConstraints);
+
+        GridBagConstraints offsetReferenceTextConstraints = new GridBagConstraints();
+        offsetReferenceTextConstraints.gridx = 1;
+        offsetReferenceTextConstraints.gridy = 0;
+        offsetReferenceTextConstraints.weightx = 1.0;
+        offsetReferenceTextConstraints.fill = GridBagConstraints.HORIZONTAL;
+        offsetReferenceTextConstraints.insets = new Insets(0, 0, 4, 8);
+        imageOffsetTestPanel.add(imageOffsetReferenceTextField, offsetReferenceTextConstraints);
+
+        GridBagConstraints offsetReferenceButtonConstraints = new GridBagConstraints();
+        offsetReferenceButtonConstraints.gridx = 2;
+        offsetReferenceButtonConstraints.gridy = 0;
+        offsetReferenceButtonConstraints.anchor = GridBagConstraints.WEST;
+        offsetReferenceButtonConstraints.insets = new Insets(0, 0, 4, 0);
+        imageOffsetTestPanel.add(imageOffsetReferenceBrowseButton, offsetReferenceButtonConstraints);
+
+        GridBagConstraints offsetCapturedLabelConstraints = new GridBagConstraints();
+        offsetCapturedLabelConstraints.gridx = 0;
+        offsetCapturedLabelConstraints.gridy = 1;
+        offsetCapturedLabelConstraints.anchor = GridBagConstraints.WEST;
+        offsetCapturedLabelConstraints.insets = new Insets(0, 0, 4, 8);
+        imageOffsetTestPanel.add(new JLabel("Captured BMP"), offsetCapturedLabelConstraints);
+
+        GridBagConstraints offsetCapturedTextConstraints = new GridBagConstraints();
+        offsetCapturedTextConstraints.gridx = 1;
+        offsetCapturedTextConstraints.gridy = 1;
+        offsetCapturedTextConstraints.weightx = 1.0;
+        offsetCapturedTextConstraints.fill = GridBagConstraints.HORIZONTAL;
+        offsetCapturedTextConstraints.insets = new Insets(0, 0, 4, 8);
+        imageOffsetTestPanel.add(imageOffsetCapturedTextField, offsetCapturedTextConstraints);
+
+        GridBagConstraints offsetCapturedButtonConstraints = new GridBagConstraints();
+        offsetCapturedButtonConstraints.gridx = 2;
+        offsetCapturedButtonConstraints.gridy = 1;
+        offsetCapturedButtonConstraints.anchor = GridBagConstraints.WEST;
+        offsetCapturedButtonConstraints.insets = new Insets(0, 0, 4, 0);
+        imageOffsetTestPanel.add(imageOffsetCapturedBrowseButton, offsetCapturedButtonConstraints);
+
+        GridBagConstraints offsetTestButtonConstraints = new GridBagConstraints();
+        offsetTestButtonConstraints.gridx = 1;
+        offsetTestButtonConstraints.gridy = 2;
+        offsetTestButtonConstraints.anchor = GridBagConstraints.WEST;
+        offsetTestButtonConstraints.insets = new Insets(4, 0, 0, 0);
+        imageOffsetTestPanel.add(imageOffsetTestButton, offsetTestButtonConstraints);
+
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(optionalFolderNamePanel);
+        panel.add(Box.createVerticalStrut(28));
+        panel.add(imageOffsetTestPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(debugScrollPane);
         panel.add(Box.createVerticalStrut(8));
@@ -226,10 +360,34 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
 
         imageCaptureButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         optionalFolderNamePanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
+        imageOffsetTestPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         debugScrollPane.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         eraseLogsButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
 
         return panel;
+    }
+
+    private static File chooseBitmapFile(JPanel parent, File initialDirectory) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select Bitmap image");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Bitmap Images (*.bmp)", "bmp"));
+
+        if (initialDirectory != null && initialDirectory.exists()) {
+            fileChooser.setCurrentDirectory(initialDirectory);
+        } else {
+            File defaultDirectory = new File("C:\\Opulo\\Data");
+            if (defaultDirectory.exists()) {
+                fileChooser.setCurrentDirectory(defaultDirectory);
+            }
+        }
+
+        int result = fileChooser.showOpenDialog(parent);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            return fileChooser.getSelectedFile();
+        }
+
+        return null;
     }
 
     private static class MaxLengthDocumentFilter extends DocumentFilter {
