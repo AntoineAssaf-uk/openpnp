@@ -30,8 +30,7 @@ public final class ReferenceMachineDebugLog {
         String line;
         try {
             line = String.format(format, args);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             line = format;
         }
 

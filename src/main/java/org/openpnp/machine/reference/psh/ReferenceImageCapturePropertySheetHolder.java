@@ -106,7 +106,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         ReferenceMachineDebugLog.setTextArea(debugTextArea);
         ReferenceMachineDebugLog.debugPrintf("Debug log panel ready.");
 
-                JTextField optionalFolderNameTextField = new JTextField(32);
+        JTextField optionalFolderNameTextField = new JTextField(32);
         Dimension optionalFolderNameTextFieldSize = optionalFolderNameTextField.getPreferredSize();
         optionalFolderNameTextField.setMinimumSize(optionalFolderNameTextFieldSize);
         optionalFolderNameTextField.setPreferredSize(optionalFolderNameTextFieldSize);
@@ -166,40 +166,40 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         imageCaptureButtonPanel.setMaximumSize(imageCaptureButtonPanelSize);
 
         imageCaptureButton.addActionListener((ActionEvent e) -> {
-        savedOkLabel.setText(" ");
-        imageCaptureButton.setEnabled(false);
-
-        String optionalFolderName = optionalFolderNameTextField.getText();
-
-        ReferenceMachineDebugLog.debugPrintf("Image Capture pressed.");
-        ReferenceMachineDebugLog.debugPrintf("Optional Folder Name = \"%s\"", optionalFolderName);
-
-        UiUtils.submitUiMachineTask(() -> {
-            ReferenceMachineDebugLog.debugPrintf("Capture task started.");
-            return ReferenceImageCaptureService.captureAndSaveReferenceImages(optionalFolderName);
-        }, (CaptureResult result) -> {
-            imageCaptureButton.setEnabled(true);
-
-            optionalFolderNameTextField.setText("");
-
-            savedOkLabel.setText("Data saved in folder " + result.getFolderName());
-
-            savedOkLabel.setVisible(true);
-
-            ReferenceMachineDebugLog.debugPrintf("Capture task completed.");
-            ReferenceMachineDebugLog.debugPrintf("Data saved in folder %s", result.getFolderName());
-            ReferenceMachineDebugLog.debugPrintf("Output path: %s", result.getFolder());
-
-        }, (throwable) -> {
-            imageCaptureButton.setEnabled(true);
-
             savedOkLabel.setText(" ");
+            imageCaptureButton.setEnabled(false);
 
-            ReferenceMachineDebugLog.debugException("Capture task failed", throwable);
+            String optionalFolderName = optionalFolderNameTextField.getText();
 
-            UiUtils.showError(throwable);
+            ReferenceMachineDebugLog.debugPrintf("Image Capture pressed.");
+            ReferenceMachineDebugLog.debugPrintf("Optional Folder Name = \"%s\"", optionalFolderName);
+
+            UiUtils.submitUiMachineTask(() -> {
+                ReferenceMachineDebugLog.debugPrintf("Capture task started.");
+                return ReferenceImageCaptureService.captureAndSaveReferenceImages(optionalFolderName);
+            }, (CaptureResult result) -> {
+                imageCaptureButton.setEnabled(true);
+
+                optionalFolderNameTextField.setText("");
+
+                savedOkLabel.setText("Data saved in folder " + result.getFolderName());
+
+                savedOkLabel.setVisible(true);
+
+                ReferenceMachineDebugLog.debugPrintf("Capture task completed.");
+                ReferenceMachineDebugLog.debugPrintf("Data saved in folder %s", result.getFolderName());
+                ReferenceMachineDebugLog.debugPrintf("Output path: %s", result.getFolder());
+
+            }, (throwable) -> {
+                imageCaptureButton.setEnabled(true);
+
+                savedOkLabel.setText(" ");
+
+                ReferenceMachineDebugLog.debugException("Capture task failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
         });
-    });
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(optionalFolderNamePanel);
@@ -223,7 +223,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             public void ancestorMoved(AncestorEvent event) {
             }
         });
-        
+
         imageCaptureButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         optionalFolderNamePanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         debugScrollPane.setAlignmentX(JPanel.LEFT_ALIGNMENT);
