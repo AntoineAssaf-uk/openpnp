@@ -38,6 +38,7 @@ import org.openpnp.util.UiUtils;
 import org.openpnp.machine.reference.debug.ReferenceMachineDebugLog;
 import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
 import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
+import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -105,8 +106,35 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             ReferenceMachineDebugLog.clear();
         });
 
+        JButton lookupTestButton = new JButton("Lookup Test");
+
+        lookupTestButton.setToolTipText("Test machine, head, camera, nozzle and actuator lookups for Gantry Test");
+
+        lookupTestButton.addActionListener((ActionEvent e) -> {
+            lookupTestButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Lookup Test pressed.");
+
+            UiUtils.submitUiMachineTask(() -> {
+                return ReferenceMachineLookup.describeStandardGantryObjects();
+            }, (String result) -> {
+                lookupTestButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintln(result);
+            }, (throwable) -> {
+                lookupTestButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Lookup Test failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
         JPanel eraseLogsButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+
         eraseLogsButtonPanel.add(eraseLogsButton);
+        eraseLogsButtonPanel.add(Box.createHorizontalStrut(8));
+        eraseLogsButtonPanel.add(lookupTestButton);
 
         ReferenceMachineDebugLog.setTextArea(debugTextArea);
         ReferenceMachineDebugLog.debugPrintf("Debug log panel ready.");
