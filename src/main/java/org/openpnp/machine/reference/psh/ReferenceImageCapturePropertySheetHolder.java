@@ -846,25 +846,36 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         gantryCsvBrowseButtonConstraints.insets = new Insets(0, 0, 4, 0);
         gantryTestPanel.add(gantryTestInputBrowseButton, gantryCsvBrowseButtonConstraints);
 
-        JPanel gantryButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel gantryButtonPanel = new JPanel();
+        gantryButtonPanel.setLayout(new BoxLayout(gantryButtonPanel, BoxLayout.Y_AXIS));
 
-        gantryButtonPanel.add(gantryTestCsvParseButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestCsvValidateButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestDryRunButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestMoveFirstPointButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestCapturePointOneButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestCaptureCycleOneButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestCaptureAllCyclesButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestMoveCycleOneButton);
-        gantryButtonPanel.add(Box.createHorizontalStrut(2));
-        gantryButtonPanel.add(gantryTestMoveAllCyclesButton);
+        JPanel gantryButtonRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel gantryButtonRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel gantryButtonRow3 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+
+        gantryButtonRow1.add(gantryTestCsvParseButton);
+        gantryButtonRow1.add(Box.createHorizontalStrut(4));
+        gantryButtonRow1.add(gantryTestCsvValidateButton);
+        gantryButtonRow1.add(Box.createHorizontalStrut(4));
+        gantryButtonRow1.add(gantryTestDryRunButton);
+
+        gantryButtonRow2.add(gantryTestMoveFirstPointButton);
+        gantryButtonRow2.add(Box.createHorizontalStrut(4));
+        gantryButtonRow2.add(gantryTestCapturePointOneButton);
+        gantryButtonRow2.add(Box.createHorizontalStrut(4));
+        gantryButtonRow2.add(gantryTestMoveCycleOneButton);
+        gantryButtonRow2.add(Box.createHorizontalStrut(4));
+        gantryButtonRow2.add(gantryTestCaptureCycleOneButton);
+
+        gantryButtonRow3.add(gantryTestMoveAllCyclesButton);
+        gantryButtonRow3.add(Box.createHorizontalStrut(4));
+        gantryButtonRow3.add(gantryTestCaptureAllCyclesButton);
+
+        gantryButtonPanel.add(gantryButtonRow1);
+        gantryButtonPanel.add(Box.createVerticalStrut(4));
+        gantryButtonPanel.add(gantryButtonRow2);
+        gantryButtonPanel.add(Box.createVerticalStrut(4));
+        gantryButtonPanel.add(gantryButtonRow3);
 
         GridBagConstraints gantryButtonPanelConstraints = new GridBagConstraints();
         gantryButtonPanelConstraints.gridx = 1;
