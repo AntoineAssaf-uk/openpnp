@@ -30,6 +30,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.JOptionPane;
 
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService;
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService.CaptureResult;
@@ -44,6 +45,7 @@ import org.openpnp.machine.reference.gantry.GantryTestCsvParser;
 import org.openpnp.machine.reference.gantry.GantryTestValidationResult;
 import org.openpnp.machine.reference.gantry.GantryTestValidator;
 import org.openpnp.machine.reference.gantry.GantryTestDryRun;
+import org.openpnp.machine.reference.gantry.GantryTestSingleMove;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -374,6 +376,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         JButton gantryTestCsvParseButton = new JButton("CSV Parse Test");
         JButton gantryTestCsvValidateButton = new JButton("CSV Validate Test");
         JButton gantryTestDryRunButton = new JButton("Execution Dry Run");
+        JButton gantryTestMoveFirstPointButton = new JButton("Move Point 1");
 
         gantryTestInputBrowseButton.addActionListener((ActionEvent e) -> {
             File selectedFile = chooseCsvFile(panel,
@@ -479,6 +482,59 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             });
         });
 
+        gantryTestMoveFirstPointButton.addActionListener((ActionEvent e) -> {
+            if (gantryTestInputFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test single move cancelled: no CSV selected.");
+                return;
+            }
+
+            int confirmation = JOptionPane.showConfirmDialog(
+                    panel,
+                    "This will move the real machine to the FIRST Gantry Test CSV point only.\n\n"
+                            + "No image capture will be performed.\n"
+                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
+                            + "Continue?",
+                    "Confirm Gantry Test Motion",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+
+            if (confirmation != JOptionPane.YES_OPTION) {
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test single move cancelled by user.");
+                return;
+            }
+
+            gantryTestMoveFirstPointButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Gantry Test single move started.");
+            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
+
+            UiUtils.submitUiMachineTask(() -> {
+                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
+                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
+
+                if (!validationResult.isPassed()) {
+                    return validationResult.describe()
+                            + System.lineSeparator()
+                            + "Gantry Test single move CANCELLED because validation failed.";
+                }
+
+                return validationResult.describe()
+                        + System.lineSeparator()
+                        + System.lineSeparator()
+                        + GantryTestSingleMove.moveFirstPoint(input);
+            }, (String result) -> {
+                gantryTestMoveFirstPointButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintln(result);
+            }, (throwable) -> {
+                gantryTestMoveFirstPointButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Gantry Test single move failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
         JPanel gantryTestPanel = new JPanel(new GridBagLayout());
         gantryTestPanel.setBorder(BorderFactory.createTitledBorder("Gantry Test"));
 
@@ -504,33 +560,29 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         gantryCsvBrowseButtonConstraints.insets = new Insets(0, 0, 4, 0);
         gantryTestPanel.add(gantryTestInputBrowseButton, gantryCsvBrowseButtonConstraints);
 
-        GridBagConstraints gantryCsvParseButtonConstraints = new GridBagConstraints();
-        gantryCsvParseButtonConstraints.gridx = 1;
-        gantryCsvParseButtonConstraints.gridy = 1;
-        gantryCsvParseButtonConstraints.anchor = GridBagConstraints.WEST;
-        gantryCsvParseButtonConstraints.insets = new Insets(4, 0, 0, 0);
-        gantryTestPanel.add(gantryTestCsvParseButton, gantryCsvParseButtonConstraints);
+        JPanel gantryButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 
-        GridBagConstraints gantryCsvValidateButtonConstraints = new GridBagConstraints();
-        gantryCsvValidateButtonConstraints.gridx = 1;
-        gantryCsvValidateButtonConstraints.gridy = 1;
-        gantryCsvValidateButtonConstraints.anchor = GridBagConstraints.WEST;
-        gantryCsvValidateButtonConstraints.insets = new Insets(4, 150, 0, 0);
-        gantryTestPanel.add(gantryTestCsvValidateButton, gantryCsvValidateButtonConstraints);
+        gantryButtonPanel.add(gantryTestCsvParseButton);
+        gantryButtonPanel.add(Box.createHorizontalStrut(8));
+        gantryButtonPanel.add(gantryTestCsvValidateButton);
+        gantryButtonPanel.add(Box.createHorizontalStrut(8));
+        gantryButtonPanel.add(gantryTestDryRunButton);
+        gantryButtonPanel.add(Box.createHorizontalStrut(8));
+        gantryButtonPanel.add(gantryTestMoveFirstPointButton);
 
-        GridBagConstraints gantryDryRunButtonConstraints = new GridBagConstraints();
-        gantryDryRunButtonConstraints.gridx = 1;
-        gantryDryRunButtonConstraints.gridy = 1;
-        gantryDryRunButtonConstraints.anchor = GridBagConstraints.WEST;
-        gantryDryRunButtonConstraints.insets = new Insets(4, 300, 0, 0);
-        gantryTestPanel.add(gantryTestDryRunButton, gantryDryRunButtonConstraints);
+        GridBagConstraints gantryButtonPanelConstraints = new GridBagConstraints();
+        gantryButtonPanelConstraints.gridx = 1;
+        gantryButtonPanelConstraints.gridy = 1;
+        gantryButtonPanelConstraints.anchor = GridBagConstraints.WEST;
+        gantryButtonPanelConstraints.insets = new Insets(4, 0, 0, 0);
+        gantryTestPanel.add(gantryButtonPanel, gantryButtonPanelConstraints);
 
         panel.add(imageCaptureButtonPanel);
-        panel.add(Box.createVerticalStrut(28));
+        panel.add(Box.createVerticalStrut(8));
         panel.add(optionalFolderNamePanel);
-        panel.add(Box.createVerticalStrut(28));
+        panel.add(Box.createVerticalStrut(14));
         panel.add(imageOffsetTestPanel);
-        panel.add(Box.createVerticalStrut(28));
+        panel.add(Box.createVerticalStrut(14));
         panel.add(gantryTestPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(debugScrollPane);
