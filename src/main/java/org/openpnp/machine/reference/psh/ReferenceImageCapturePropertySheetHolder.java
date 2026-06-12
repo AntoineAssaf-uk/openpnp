@@ -39,6 +39,8 @@ import org.openpnp.machine.reference.debug.ReferenceMachineDebugLog;
 import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
 import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
+import org.openpnp.machine.reference.gantry.GantryTestCsvInput;
+import org.openpnp.machine.reference.gantry.GantryTestCsvParser;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -360,11 +362,91 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         offsetTestButtonConstraints.insets = new Insets(4, 0, 0, 0);
         imageOffsetTestPanel.add(imageOffsetTestButton, offsetTestButtonConstraints);
 
+        final File[] gantryTestInputFile = new File[1];
+
+        JTextField gantryTestInputTextField = new JTextField(64);
+        gantryTestInputTextField.setEditable(false);
+
+        JButton gantryTestInputBrowseButton = new JButton("Select Gantry CSV");
+        JButton gantryTestCsvParseButton = new JButton("CSV Parse Test");
+
+        gantryTestInputBrowseButton.addActionListener((ActionEvent e) -> {
+            File selectedFile = chooseCsvFile(panel,
+                    gantryTestInputFile[0] == null ? null : gantryTestInputFile[0].getParentFile());
+
+            if (selectedFile != null) {
+                gantryTestInputFile[0] = selectedFile;
+                gantryTestInputTextField.setText(selectedFile.getAbsolutePath());
+
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV selected: %s", selectedFile.getAbsolutePath());
+            }
+        });
+
+        gantryTestCsvParseButton.addActionListener((ActionEvent e) -> {
+            if (gantryTestInputFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV parse cancelled: no CSV selected.");
+                return;
+            }
+
+            gantryTestCsvParseButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV parse started.");
+            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
+
+            UiUtils.submitUiMachineTask(() -> {
+                return GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
+            }, (GantryTestCsvInput input) -> {
+                gantryTestCsvParseButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintln(input.describe());
+            }, (throwable) -> {
+                gantryTestCsvParseButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Gantry Test CSV parse failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
+        JPanel gantryTestPanel = new JPanel(new GridBagLayout());
+        gantryTestPanel.setBorder(BorderFactory.createTitledBorder("Gantry Test"));
+
+        GridBagConstraints gantryCsvLabelConstraints = new GridBagConstraints();
+        gantryCsvLabelConstraints.gridx = 0;
+        gantryCsvLabelConstraints.gridy = 0;
+        gantryCsvLabelConstraints.anchor = GridBagConstraints.WEST;
+        gantryCsvLabelConstraints.insets = new Insets(0, 0, 4, 8);
+        gantryTestPanel.add(new JLabel("Input CSV"), gantryCsvLabelConstraints);
+
+        GridBagConstraints gantryCsvTextConstraints = new GridBagConstraints();
+        gantryCsvTextConstraints.gridx = 1;
+        gantryCsvTextConstraints.gridy = 0;
+        gantryCsvTextConstraints.weightx = 1.0;
+        gantryCsvTextConstraints.fill = GridBagConstraints.HORIZONTAL;
+        gantryCsvTextConstraints.insets = new Insets(0, 0, 4, 8);
+        gantryTestPanel.add(gantryTestInputTextField, gantryCsvTextConstraints);
+
+        GridBagConstraints gantryCsvBrowseButtonConstraints = new GridBagConstraints();
+        gantryCsvBrowseButtonConstraints.gridx = 2;
+        gantryCsvBrowseButtonConstraints.gridy = 0;
+        gantryCsvBrowseButtonConstraints.anchor = GridBagConstraints.WEST;
+        gantryCsvBrowseButtonConstraints.insets = new Insets(0, 0, 4, 0);
+        gantryTestPanel.add(gantryTestInputBrowseButton, gantryCsvBrowseButtonConstraints);
+
+        GridBagConstraints gantryCsvParseButtonConstraints = new GridBagConstraints();
+        gantryCsvParseButtonConstraints.gridx = 1;
+        gantryCsvParseButtonConstraints.gridy = 1;
+        gantryCsvParseButtonConstraints.anchor = GridBagConstraints.WEST;
+        gantryCsvParseButtonConstraints.insets = new Insets(4, 0, 0, 0);
+        gantryTestPanel.add(gantryTestCsvParseButton, gantryCsvParseButtonConstraints);
+
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(optionalFolderNamePanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(imageOffsetTestPanel);
+        panel.add(Box.createVerticalStrut(28));
+        panel.add(gantryTestPanel);
         panel.add(Box.createVerticalStrut(28));
         panel.add(debugScrollPane);
         panel.add(Box.createVerticalStrut(8));
@@ -389,10 +471,37 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         imageCaptureButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         optionalFolderNamePanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         imageOffsetTestPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
+        gantryTestPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         debugScrollPane.setAlignmentX(JPanel.LEFT_ALIGNMENT);
         eraseLogsButtonPanel.setAlignmentX(JPanel.LEFT_ALIGNMENT);
 
         return panel;
+    }
+
+    private static File chooseCsvFile(JPanel parent, File initialDirectory) {
+        JFileChooser fileChooser = new JFileChooser();
+
+        fileChooser.setDialogTitle("Select Gantry Test CSV");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+
+        if (initialDirectory != null && initialDirectory.exists()) {
+            fileChooser.setCurrentDirectory(initialDirectory);
+        } else {
+            File defaultDirectory = new File("C:\\Opulo\\Data");
+
+            if (defaultDirectory.exists()) {
+                fileChooser.setCurrentDirectory(defaultDirectory);
+            }
+        }
+
+        int result = fileChooser.showOpenDialog(parent);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            return fileChooser.getSelectedFile();
+        }
+
+        return null;
     }
 
     private static File chooseBitmapFile(JPanel parent, File initialDirectory) {
