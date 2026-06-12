@@ -43,6 +43,7 @@ import org.openpnp.machine.reference.gantry.GantryTestCsvInput;
 import org.openpnp.machine.reference.gantry.GantryTestCsvParser;
 import org.openpnp.machine.reference.gantry.GantryTestValidationResult;
 import org.openpnp.machine.reference.gantry.GantryTestValidator;
+import org.openpnp.machine.reference.gantry.GantryTestDryRun;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -372,6 +373,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         JButton gantryTestInputBrowseButton = new JButton("Select Gantry CSV");
         JButton gantryTestCsvParseButton = new JButton("CSV Parse Test");
         JButton gantryTestCsvValidateButton = new JButton("CSV Validate Test");
+        JButton gantryTestDryRunButton = new JButton("Execution Dry Run");
 
         gantryTestInputBrowseButton.addActionListener((ActionEvent e) -> {
             File selectedFile = chooseCsvFile(panel,
@@ -439,6 +441,44 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             });
         });
 
+        gantryTestDryRunButton.addActionListener((ActionEvent e) -> {
+            if (gantryTestInputFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test execution dry-run cancelled: no CSV selected.");
+                return;
+            }
+
+            gantryTestDryRunButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Gantry Test execution dry-run started.");
+            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
+
+            UiUtils.submitUiMachineTask(() -> {
+                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
+                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
+
+                if (!validationResult.isPassed()) {
+                    return validationResult.describe()
+                            + System.lineSeparator()
+                            + "Gantry Test execution dry-run CANCELLED because validation failed.";
+                }
+
+                return validationResult.describe()
+                        + System.lineSeparator()
+                        + System.lineSeparator()
+                        + GantryTestDryRun.describe(input);
+            }, (String result) -> {
+                gantryTestDryRunButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintln(result);
+            }, (throwable) -> {
+                gantryTestDryRunButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Gantry Test execution dry-run failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
         JPanel gantryTestPanel = new JPanel(new GridBagLayout());
         gantryTestPanel.setBorder(BorderFactory.createTitledBorder("Gantry Test"));
 
@@ -473,10 +513,17 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
 
         GridBagConstraints gantryCsvValidateButtonConstraints = new GridBagConstraints();
         gantryCsvValidateButtonConstraints.gridx = 1;
-        gantryCsvValidateButtonConstraints.gridy = 2;
+        gantryCsvValidateButtonConstraints.gridy = 1;
         gantryCsvValidateButtonConstraints.anchor = GridBagConstraints.WEST;
-        gantryCsvValidateButtonConstraints.insets = new Insets(4, 0, 0, 0);
+        gantryCsvValidateButtonConstraints.insets = new Insets(4, 150, 0, 0);
         gantryTestPanel.add(gantryTestCsvValidateButton, gantryCsvValidateButtonConstraints);
+
+        GridBagConstraints gantryDryRunButtonConstraints = new GridBagConstraints();
+        gantryDryRunButtonConstraints.gridx = 1;
+        gantryDryRunButtonConstraints.gridy = 1;
+        gantryDryRunButtonConstraints.anchor = GridBagConstraints.WEST;
+        gantryDryRunButtonConstraints.insets = new Insets(4, 300, 0, 0);
+        gantryTestPanel.add(gantryTestDryRunButton, gantryDryRunButtonConstraints);
 
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
