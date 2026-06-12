@@ -41,6 +41,8 @@ import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
 import org.openpnp.machine.reference.gantry.GantryTestCsvInput;
 import org.openpnp.machine.reference.gantry.GantryTestCsvParser;
+import org.openpnp.machine.reference.gantry.GantryTestValidationResult;
+import org.openpnp.machine.reference.gantry.GantryTestValidator;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -369,6 +371,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
 
         JButton gantryTestInputBrowseButton = new JButton("Select Gantry CSV");
         JButton gantryTestCsvParseButton = new JButton("CSV Parse Test");
+        JButton gantryTestCsvValidateButton = new JButton("CSV Validate Test");
 
         gantryTestInputBrowseButton.addActionListener((ActionEvent e) -> {
             File selectedFile = chooseCsvFile(panel,
@@ -408,6 +411,34 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             });
         });
 
+        gantryTestCsvValidateButton.addActionListener((ActionEvent e) -> {
+            if (gantryTestInputFile[0] == null) {
+                ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV validation cancelled: no CSV selected.");
+                return;
+            }
+
+            gantryTestCsvValidateButton.setEnabled(false);
+
+            ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV validation started.");
+            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
+
+            UiUtils.submitUiMachineTask(() -> {
+                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
+
+                return GantryTestValidator.validate(input);
+            }, (GantryTestValidationResult result) -> {
+                gantryTestCsvValidateButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugPrintln(result.describe());
+            }, (throwable) -> {
+                gantryTestCsvValidateButton.setEnabled(true);
+
+                ReferenceMachineDebugLog.debugException("Gantry Test CSV validation failed", throwable);
+
+                UiUtils.showError(throwable);
+            });
+        });
+
         JPanel gantryTestPanel = new JPanel(new GridBagLayout());
         gantryTestPanel.setBorder(BorderFactory.createTitledBorder("Gantry Test"));
 
@@ -439,6 +470,13 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         gantryCsvParseButtonConstraints.anchor = GridBagConstraints.WEST;
         gantryCsvParseButtonConstraints.insets = new Insets(4, 0, 0, 0);
         gantryTestPanel.add(gantryTestCsvParseButton, gantryCsvParseButtonConstraints);
+
+        GridBagConstraints gantryCsvValidateButtonConstraints = new GridBagConstraints();
+        gantryCsvValidateButtonConstraints.gridx = 1;
+        gantryCsvValidateButtonConstraints.gridy = 2;
+        gantryCsvValidateButtonConstraints.anchor = GridBagConstraints.WEST;
+        gantryCsvValidateButtonConstraints.insets = new Insets(4, 0, 0, 0);
+        gantryTestPanel.add(gantryTestCsvValidateButton, gantryCsvValidateButtonConstraints);
 
         panel.add(imageCaptureButtonPanel);
         panel.add(Box.createVerticalStrut(28));
