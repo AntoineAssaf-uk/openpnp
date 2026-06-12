@@ -18,6 +18,8 @@ import org.openpnp.spi.Camera;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.Machine;
 import org.openpnp.util.MovableUtils;
+import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
+import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 
 public final class GantryTestSingleCycleCapture {
     private static final double MOVE_SPEED = 0.20;
@@ -136,6 +138,30 @@ public final class GantryTestSingleCycleCapture {
             sb.append("  Saved original BMP = ").append(originalFile).append(System.lineSeparator());
             sb.append("  Saved mono BMP = ").append(monoFile).append(System.lineSeparator());
             sb.append("  Saved mono crop BMP = ").append(cropFile).append(System.lineSeparator());
+
+            Path referenceBitmapFile = GantryTestReferenceImageResolver.findReferenceBitmap(input, point);
+
+            if (referenceBitmapFile == null) {
+                throw new Exception("Cannot calculate image offset because Ref_bmp file was not found for line "
+                        + point.getLineNumber()
+                        + ". Ref_bmp=\""
+                        + point.getReferenceBitmap()
+                        + "\".");
+            }
+
+            sb.append("  Reference BMP = ").append(referenceBitmapFile).append(System.lineSeparator());
+            sb.append("  Calculating image offset...").append(System.lineSeparator());
+
+            CsImageOffsetResult offsetResult = ReferenceImageOffsetService.findOffset(
+                    referenceBitmapFile.toFile(),
+                    cropFile.toFile());
+
+            sb.append(String.format(Locale.US,
+                    "  Image offset result: dx=%.6f px, dy=%.6f px, peak=%.9f, dt=%d ms",
+                    offsetResult.getDx(),
+                    offsetResult.getDy(),
+                    offsetResult.getPeak(),
+                    offsetResult.getDt())).append(System.lineSeparator());
         }
 
         sb.append("Gantry Test cycle 1 capture PASSED.");
