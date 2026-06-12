@@ -2,6 +2,14 @@ package org.openpnp.machine.reference.gantry;
 
 import java.util.Locale;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
 import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Head;
@@ -41,15 +49,13 @@ public final class GantryTestValidator {
 
             if (!machine.isEnabled()) {
                 result.addError("Machine is not enabled.");
-            }
-            else {
+            } else {
                 result.addMessage("Machine enabled = true");
             }
 
             if (!machine.isHomed()) {
                 result.addError("Machine is not homed.");
-            }
-            else {
+            } else {
                 result.addMessage("Machine homed = true");
             }
 
@@ -61,8 +67,7 @@ public final class GantryTestValidator {
 
             bottomCamera = ReferenceMachineLookup.findMachineCamera(machine, ReferenceMachineLookup.BOTTOM_CAMERA);
             result.addMessage("Bottom camera found = " + bottomCamera.getName());
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             result.addError("Machine lookup failed: " + e.getMessage());
             return result;
         }
@@ -79,7 +84,7 @@ public final class GantryTestValidator {
         int expectedIndex = 1;
 
         for (GantryTestPoint point : input.getPoints()) {
-            validatePoint(result, head, point, expectedIndex);
+            validatePoint(result, head, point, expectedIndex, input.getSourceFile());
             expectedIndex++;
         }
 
@@ -90,7 +95,8 @@ public final class GantryTestValidator {
             GantryTestValidationResult result,
             Head head,
             GantryTestPoint point,
-            int expectedIndex) {
+            int expectedIndex,
+            Path csvSourceFile) {
         String row = String.format(Locale.US,
                 "line %d, #=%d, Name=\"%s\"",
                 point.getLineNumber(),
@@ -124,8 +130,7 @@ public final class GantryTestValidator {
         try {
             Nozzle nozzle = ReferenceMachineLookup.findNozzle(head, point.getNozzleName());
             result.addMessage(row + ": Nozzle found = " + nozzle.getName());
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             result.addError(row + ": Nozzle \"" + point.getNozzleName()
                     + "\" not found on head " + ReferenceMachineLookup.HEAD_H1 + ".");
             rowPassed = false;
@@ -142,33 +147,101 @@ public final class GantryTestValidator {
             rowPassed = false;
         }
 
-        validateReferenceBitmapName(result, row, point);
+        if (!validateReferenceBitmapName(result, row, point, csvSourceFile)) {
+            rowPassed = false;
+        }
 
         if (rowPassed) {
             result.addMessage(row + ": VALID.");
         }
     }
 
-    private static void validateReferenceBitmapName(
+    private static boolean validateReferenceBitmapName(
             GantryTestValidationResult result,
             String row,
-            GantryTestPoint point) {
+            GantryTestPoint point,
+            Path csvSourceFile) {
         String referenceBitmap = point.getReferenceBitmap();
 
         if (referenceBitmap == null || referenceBitmap.trim().isEmpty()) {
             result.addError(row + ": Ref_bmp is empty.");
-            return;
+            return false;
         }
 
         String trimmed = referenceBitmap.trim();
 
         if (!trimmed.toLowerCase(Locale.US).endsWith(".bmp")) {
             result.addError(row + ": Ref_bmp must end with .bmp. Ref_bmp=\"" + trimmed + "\".");
+            return false;
         }
 
         if (trimmed.contains("\\") || trimmed.contains("/")) {
             result.addWarning(row + ": Ref_bmp should normally be a filename only, not a full path. Ref_bmp=\""
                     + trimmed + "\".");
+        }
+
+        Path directPath = Paths.get(trimmed);
+
+        if (directPath.isAbsolute()) {
+            if (Files.isRegularFile(directPath)) {
+                result.addMessage(row + ": Ref_bmp file found = " + directPath);
+                return true;
+            }
+
+            result.addError(row + ": Ref_bmp file not found = " + directPath);
+            return false;
+        }
+
+        Path foundPath = findReferenceBitmap(trimmed, point, csvSourceFile);
+
+        if (foundPath != null) {
+            result.addMessage(row + ": Ref_bmp file found = " + foundPath);
+            return true;
+        }
+
+        result.addError(row + ": Ref_bmp file not found. Ref_bmp=\"" + trimmed
+                + "\". Checked CSV folder and C:\\Opulo\\Data\\Reference Images.");
+        return false;
+    }
+
+    private static Path findReferenceBitmap(String referenceBitmap, GantryTestPoint point, Path csvSourceFile) {
+        List<Path> candidates = new ArrayList<>();
+
+        if (csvSourceFile != null && csvSourceFile.getParent() != null) {
+            candidates.add(csvSourceFile.getParent().resolve(referenceBitmap));
+        }
+
+        Path referenceImagesRoot = Paths.get("C:\\Opulo\\Data\\Reference Images");
+
+        if (point.getName() != null && !point.getName().trim().isEmpty()) {
+            candidates.add(referenceImagesRoot.resolve(point.getName().trim()).resolve(referenceBitmap));
+        }
+
+        candidates.add(referenceImagesRoot.resolve(referenceBitmap));
+
+        for (Path candidate : candidates) {
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+
+        return findFileBelow(referenceImagesRoot, referenceBitmap, 4);
+    }
+
+    private static Path findFileBelow(Path root, String filename, int maxDepth) {
+        if (root == null || filename == null || !Files.isDirectory(root)) {
+            return null;
+        }
+
+        try (Stream<Path> stream = Files.walk(root, maxDepth)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName() != null)
+                    .filter(path -> filename.equalsIgnoreCase(path.getFileName().toString()))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            return null;
         }
     }
 
