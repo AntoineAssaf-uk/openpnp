@@ -52,6 +52,7 @@ import org.openpnp.machine.reference.gantry.GantryTestSinglePointCapture;
 import org.openpnp.machine.reference.gantry.GantryTestSingleCycleCapture;
 import org.openpnp.machine.reference.gantry.GantryTestAllCyclesCapture;
 
+
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
     private static final int OPTIONAL_FOLDER_NAME_MAX_LENGTH = 32;
