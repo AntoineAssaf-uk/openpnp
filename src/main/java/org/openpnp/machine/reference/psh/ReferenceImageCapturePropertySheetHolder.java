@@ -531,7 +531,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         if (initialDirectory != null && initialDirectory.exists()) {
             fileChooser.setCurrentDirectory(initialDirectory);
         } else {
-            File defaultDirectory = new File("C:\\Opulo\\Data");
+            File defaultDirectory = new File("C:\\Opulo\\Tests");
 
             if (defaultDirectory.exists()) {
                 fileChooser.setCurrentDirectory(defaultDirectory);

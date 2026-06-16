@@ -10,8 +10,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 import javax.imageio.ImageIO;
 
@@ -64,37 +62,33 @@ public final class GantryTestAllCyclesCapture {
         ReferenceMachineLookup.requireMachineEnabledAndHomed(machine);
 
         Head head = ReferenceMachineLookup.findHead(machine, ReferenceMachineLookup.HEAD_H1);
-Camera topCamera = ReferenceMachineLookup.findDefaultHeadCamera(head);
-Camera bottomCamera = ReferenceMachineLookup.findMachineCamera(machine, ReferenceMachineLookup.BOTTOM_CAMERA);
+        Camera topCamera = ReferenceMachineLookup.findDefaultHeadCamera(head);
+        Camera bottomCamera = ReferenceMachineLookup.findMachineCamera(machine, ReferenceMachineLookup.BOTTOM_CAMERA);
 
-Location topCameraUnitsPerPixel = topCamera.getUnitsPerPixelAtZ()
-        .convertToUnits(LengthUnit.Millimeters);
-Location bottomCameraUnitsPerPixel = bottomCamera.getUnitsPerPixelAtZ()
-        .convertToUnits(LengthUnit.Millimeters);
+        Location topCameraUnitsPerPixel = topCamera.getUnitsPerPixelAtZ()
+                .convertToUnits(LengthUnit.Millimeters);
+        Location bottomCameraUnitsPerPixel = bottomCamera.getUnitsPerPixelAtZ()
+                .convertToUnits(LengthUnit.Millimeters);
 
         Path outputFolder = createOutputFolder(input);
 
         Path outputCsvFile = outputFolder.resolve("Gantry Test output.csv");
 
-        Path summaryCsvFile = outputFolder.resolve("Gantry Test summary.csv");
-
-Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
-
         List<String> resultCsvLines = new ArrayList<>();
 
-resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
-        + "Ref_bmp,Reference_File,Captured_Crop_File,"
-        + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
-        + "camera_upp_x_mm_per_pixel,camera_upp_y_mm_per_pixel,"
-        + "peak,dt_ms");
+        resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
+                + "Ref_bmp,Reference_File,Captured_Crop_File,"
+                + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
+                + "camera_upp_x_mm_per_pixel,camera_upp_y_mm_per_pixel,"
+                + "peak,dt_ms");
 
         StringBuilder sb = new StringBuilder();
 
         sb.append("Gantry Test all cycles capture").append(System.lineSeparator());
         sb.append("REAL MACHINE MOTION WAS REQUESTED.").append(System.lineSeparator());
         sb.append("All CSV cycles will be moved and captured.").append(System.lineSeparator());
-sb.append("Top and Bottom camera capture are supported according to CSV Top_Bot.")
-        .append(System.lineSeparator());
+        sb.append("Top and Bottom camera capture are supported according to CSV Top_Bot.")
+                .append(System.lineSeparator());
         sb.append("Image offset calculation will be performed for every captured mono crop.")
                 .append(System.lineSeparator());
         sb.append("Number of cycles = ").append(cycles).append(System.lineSeparator());
@@ -106,17 +100,16 @@ sb.append("Top and Bottom camera capture are supported according to CSV Top_Bot.
                 MOVE_SPEED)).append(System.lineSeparator());
         sb.append("Output folder = ").append(outputFolder).append(System.lineSeparator());
         sb.append("Output CSV = ").append(outputCsvFile).append(System.lineSeparator());
-        sb.append("Summary CSV = ").append(summaryCsvFile).append(System.lineSeparator());
 
-sb.append(String.format(Locale.US,
-        "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
-        topCameraUnitsPerPixel.getX(),
-        topCameraUnitsPerPixel.getY())).append(System.lineSeparator());
+        sb.append(String.format(Locale.US,
+                "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
+                topCameraUnitsPerPixel.getX(),
+                topCameraUnitsPerPixel.getY())).append(System.lineSeparator());
 
-sb.append(String.format(Locale.US,
-        "Bottom camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
-        bottomCameraUnitsPerPixel.getX(),
-        bottomCameraUnitsPerPixel.getY())).append(System.lineSeparator());
+        sb.append(String.format(Locale.US,
+                "Bottom camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
+                bottomCameraUnitsPerPixel.getX(),
+                bottomCameraUnitsPerPixel.getY())).append(System.lineSeparator());
         int visitIndex = 0;
 
         for (int cycle = 1; cycle <= cycles; cycle++) {
@@ -128,87 +121,87 @@ sb.append(String.format(Locale.US,
             for (GantryTestPoint point : input.getPoints()) {
                 visitIndex++;
 
-boolean isTopPoint = "Top".equals(point.getTopBottom());
-boolean isBottomPoint = "Bot".equals(point.getTopBottom());
+                boolean isTopPoint = "Top".equals(point.getTopBottom());
+                boolean isBottomPoint = "Bot".equals(point.getTopBottom());
 
-if (!isTopPoint && !isBottomPoint) {
-    throw new Exception("Step 4.15 only supports Top or Bot camera capture. "
-            + "Line " + point.getLineNumber()
-            + " has Top_Bot=" + point.getTopBottom());
-}
+                if (!isTopPoint && !isBottomPoint) {
+                    throw new Exception("Step 4.15 only supports Top or Bot camera capture. "
+                            + "Line " + point.getLineNumber()
+                            + " has Top_Bot=" + point.getTopBottom());
+                }
 
-Camera captureCamera;
-Location cameraUnitsPerPixel;
-Location finalLocation;
+                Camera captureCamera;
+                Location cameraUnitsPerPixel;
+                Location finalLocation;
 
-if (isTopPoint) {
-    captureCamera = topCamera;
-    cameraUnitsPerPixel = topCameraUnitsPerPixel;
+                if (isTopPoint) {
+                    captureCamera = topCamera;
+                    cameraUnitsPerPixel = topCameraUnitsPerPixel;
 
-    Location targetLocation = new Location(
-            LengthUnit.Millimeters,
-            point.getX(),
-            point.getY(),
-            Double.NaN,
-            Double.NaN);
+                    Location targetLocation = new Location(
+                            LengthUnit.Millimeters,
+                            point.getX(),
+                            point.getY(),
+                            Double.NaN,
+                            Double.NaN);
 
-    sb.append(String.format(Locale.US,
-            "    Target Top camera location: X=%.6f mm, Y=%.6f mm",
-            point.getX(),
-            point.getY())).append(System.lineSeparator());
+                    sb.append(String.format(Locale.US,
+                            "    Target Top camera location: X=%.6f mm, Y=%.6f mm",
+                            point.getX(),
+                            point.getY())).append(System.lineSeparator());
 
-    MovableUtils.moveToLocationAtSafeZ(topCamera, targetLocation, MOVE_SPEED);
+                    MovableUtils.moveToLocationAtSafeZ(topCamera, targetLocation, MOVE_SPEED);
 
-    finalLocation = topCamera.getLocation();
+                    finalLocation = topCamera.getLocation();
 
-    sb.append(String.format(Locale.US,
-            "    Final Top camera location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
-            finalLocation.getX(),
-            finalLocation.getY(),
-            finalLocation.getZ(),
-            finalLocation.getRotation())).append(System.lineSeparator());
+                    sb.append(String.format(Locale.US,
+                            "    Final Top camera location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
+                            finalLocation.getX(),
+                            finalLocation.getY(),
+                            finalLocation.getZ(),
+                            finalLocation.getRotation())).append(System.lineSeparator());
 
-    sb.append("    Capturing Top camera image...").append(System.lineSeparator());
-}
-else {
-    Nozzle nozzle = ReferenceMachineLookup.findNozzle(head, point.getNozzleName());
+                    sb.append("    Capturing Top camera image...").append(System.lineSeparator());
+                } else {
+                    Nozzle nozzle = ReferenceMachineLookup.findNozzle(head, point.getNozzleName());
 
-    captureCamera = bottomCamera;
-    cameraUnitsPerPixel = bottomCameraUnitsPerPixel;
+                    captureCamera = bottomCamera;
+                    cameraUnitsPerPixel = bottomCameraUnitsPerPixel;
 
-    Location targetLocation = new Location(
-            LengthUnit.Millimeters,
-            point.getX(),
-            point.getY(),
-            point.getNozzleZ(),
-            Double.NaN);
+                    Location targetLocation = new Location(
+                            LengthUnit.Millimeters,
+                            point.getX(),
+                            point.getY(),
+                            point.getNozzleZ(),
+                            Double.NaN);
 
-    sb.append(String.format(Locale.US,
-            "    Target nozzle %s location over Bottom camera: X=%.6f mm, Y=%.6f mm, Z=%.6f mm",
-            nozzle.getName(),
-            point.getX(),
-            point.getY(),
-            point.getNozzleZ())).append(System.lineSeparator());
+                    sb.append(String.format(Locale.US,
+                            "    Target nozzle %s location over Bottom camera: X=%.6f mm, Y=%.6f mm, Z=%.6f mm",
+                            nozzle.getName(),
+                            point.getX(),
+                            point.getY(),
+                            point.getNozzleZ())).append(System.lineSeparator());
 
-    MovableUtils.moveToLocationAtSafeZ(nozzle, targetLocation, MOVE_SPEED);
+                    MovableUtils.moveToLocationAtSafeZ(nozzle, targetLocation, MOVE_SPEED);
 
-    finalLocation = nozzle.getLocation();
+                    finalLocation = nozzle.getLocation();
 
-    sb.append(String.format(Locale.US,
-            "    Final nozzle %s location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
-            nozzle.getName(),
-            finalLocation.getX(),
-            finalLocation.getY(),
-            finalLocation.getZ(),
-            finalLocation.getRotation())).append(System.lineSeparator());
+                    sb.append(String.format(Locale.US,
+                            "    Final nozzle %s location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
+                            nozzle.getName(),
+                            finalLocation.getX(),
+                            finalLocation.getY(),
+                            finalLocation.getZ(),
+                            finalLocation.getRotation())).append(System.lineSeparator());
 
-    sb.append("    Capturing Bottom camera image...").append(System.lineSeparator());
-}
+                    sb.append("    Capturing Bottom camera image...").append(System.lineSeparator());
+                }
 
-BufferedImage originalImage = captureCamera.lightSettleAndCapture();
+                BufferedImage originalImage = captureCamera.lightSettleAndCapture();
                 if (originalImage == null) {
-throw new Exception(point.getTopBottom() + " camera capture returned null image at cycle "
-        + cycle + ", line " + point.getLineNumber() + ".");                }
+                    throw new Exception(point.getTopBottom() + " camera capture returned null image at cycle "
+                            + cycle + ", line " + point.getLineNumber() + ".");
+                }
 
                 BufferedImage monoImage = ReferenceImageCaptureService.createGrayscaleLuminosityImage(originalImage);
                 BufferedImage cropImage = ReferenceImageCaptureService.cropCentered(monoImage, point.getCropFactor());
@@ -266,33 +259,21 @@ throw new Exception(point.getTopBottom() + " camera capture returned null image 
                         offsetResult.getPeak(),
                         offsetResult.getDt())).append(System.lineSeparator());
 
-resultCsvLines.add(buildResultCsvLine(
-        cycle,
-        visitIndex,
-        point,
-        referenceBitmapFile,
-        cropFile,
-        offsetResult,
-        cameraUnitsPerPixel));
-
-SummaryAccumulator summary = summaryByPoint.computeIfAbsent(
-        point.getIndex(),
-        key -> new SummaryAccumulator(point));
-
-summary.add(offsetResult, topCameraUnitsPerPixel);
-
-
+                resultCsvLines.add(buildResultCsvLine(
+                        cycle,
+                        visitIndex,
+                        point,
+                        referenceBitmapFile,
+                        cropFile,
+                        offsetResult,
+                        cameraUnitsPerPixel));
             }
         }
 
-List<String> summaryCsvLines = buildSummaryCsvLines(summaryByPoint);
+        Files.write(outputCsvFile, resultCsvLines, StandardCharsets.UTF_8);
 
-Files.write(outputCsvFile, resultCsvLines, StandardCharsets.UTF_8);
-Files.write(summaryCsvFile, summaryCsvLines, StandardCharsets.UTF_8);
-
-sb.append("Saved output CSV = ").append(outputCsvFile).append(System.lineSeparator());
-sb.append("Saved summary CSV = ").append(summaryCsvFile).append(System.lineSeparator());
-sb.append("Gantry Test all cycles capture PASSED.");
+        sb.append("Saved output CSV = ").append(outputCsvFile).append(System.lineSeparator());
+        sb.append("Gantry Test all cycles capture PASSED.");
 
         return sb.toString();
     }
@@ -313,14 +294,14 @@ sb.append("Gantry Test all cycles capture PASSED.");
         return outputFolder;
     }
 
-private static String buildBaseFileName(int cycle, GantryTestPoint point) {
-    return String.format(Locale.US,
-            "Cycle_%03d_Point_%03d_Line_%03d_%s",
-            cycle,
-            point.getIndex(),
-            point.getLineNumber(),
-            point.getTopBottom());
-}
+    private static String buildBaseFileName(int cycle, GantryTestPoint point) {
+        return String.format(Locale.US,
+                "Cycle_%03d_Point_%03d_Line_%03d_%s",
+                cycle,
+                point.getIndex(),
+                point.getLineNumber(),
+                point.getTopBottom());
+    }
 
     private static String buildResultCsvLine(
             int cycle,
@@ -390,144 +371,5 @@ private static String buildBaseFileName(int cycle, GantryTestPoint point) {
             throw new Exception("No BMP image writer is available for file: " + file);
         }
     }
-
-    private static List<String> buildSummaryCsvLines(Map<Integer, SummaryAccumulator> summaryByPoint) {
-    List<String> lines = new ArrayList<>();
-
-    lines.add("Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,Ref_bmp,count,"
-            + "d_x_pixel_mean,d_y_pixel_mean,d_x_pixel_stddev,d_y_pixel_stddev,"
-            + "d_x_pixel_range,d_y_pixel_range,"
-            + "d_x_mm_raw_mean,d_y_mm_raw_mean,d_x_mm_raw_stddev,d_y_mm_raw_stddev,"
-            + "d_x_mm_raw_range,d_y_mm_raw_range,"
-            + "peak_mean,peak_min,peak_max,dt_ms_max");
-
-    for (SummaryAccumulator summary : summaryByPoint.values()) {
-        lines.add(summary.toCsvLine());
-    }
-
-    return lines;
-}
-
-private static final class SummaryAccumulator {
-    private final GantryTestPoint point;
-
-    private int count;
-
-    private double sumDxPixel;
-    private double sumDyPixel;
-    private double sumDxPixelSquared;
-    private double sumDyPixelSquared;
-    private double minDxPixel = Double.POSITIVE_INFINITY;
-    private double maxDxPixel = Double.NEGATIVE_INFINITY;
-    private double minDyPixel = Double.POSITIVE_INFINITY;
-    private double maxDyPixel = Double.NEGATIVE_INFINITY;
-
-    private double sumDxMmRaw;
-    private double sumDyMmRaw;
-    private double sumDxMmRawSquared;
-    private double sumDyMmRawSquared;
-    private double minDxMmRaw = Double.POSITIVE_INFINITY;
-    private double maxDxMmRaw = Double.NEGATIVE_INFINITY;
-    private double minDyMmRaw = Double.POSITIVE_INFINITY;
-    private double maxDyMmRaw = Double.NEGATIVE_INFINITY;
-
-    private double sumPeak;
-    private double minPeak = Double.POSITIVE_INFINITY;
-    private double maxPeak = Double.NEGATIVE_INFINITY;
-    private long maxDt;
-
-    SummaryAccumulator(GantryTestPoint point) {
-        this.point = point;
-    }
-
-    void add(CsImageOffsetResult offsetResult, Location unitsPerPixel) {
-        double dxPixel = offsetResult.getDx();
-        double dyPixel = offsetResult.getDy();
-        double dxMmRaw = dxPixel * unitsPerPixel.getX();
-        double dyMmRaw = dyPixel * unitsPerPixel.getY();
-        double peak = offsetResult.getPeak();
-
-        count++;
-
-        sumDxPixel += dxPixel;
-        sumDyPixel += dyPixel;
-        sumDxPixelSquared += dxPixel * dxPixel;
-        sumDyPixelSquared += dyPixel * dyPixel;
-        minDxPixel = Math.min(minDxPixel, dxPixel);
-        maxDxPixel = Math.max(maxDxPixel, dxPixel);
-        minDyPixel = Math.min(minDyPixel, dyPixel);
-        maxDyPixel = Math.max(maxDyPixel, dyPixel);
-
-        sumDxMmRaw += dxMmRaw;
-        sumDyMmRaw += dyMmRaw;
-        sumDxMmRawSquared += dxMmRaw * dxMmRaw;
-        sumDyMmRawSquared += dyMmRaw * dyMmRaw;
-        minDxMmRaw = Math.min(minDxMmRaw, dxMmRaw);
-        maxDxMmRaw = Math.max(maxDxMmRaw, dxMmRaw);
-        minDyMmRaw = Math.min(minDyMmRaw, dyMmRaw);
-        maxDyMmRaw = Math.max(maxDyMmRaw, dyMmRaw);
-
-        sumPeak += peak;
-        minPeak = Math.min(minPeak, peak);
-        maxPeak = Math.max(maxPeak, peak);
-        maxDt = Math.max(maxDt, offsetResult.getDt());
-    }
-
-    String toCsvLine() {
-        return String.join(",",
-                Integer.toString(point.getIndex()),
-                Integer.toString(point.getLineNumber()),
-                csv(point.getName()),
-                formatDouble(point.getX()),
-                formatDouble(point.getY()),
-                csv(point.getNozzleName()),
-                formatDouble(point.getNozzleZ()),
-                Integer.toString(point.getCropFactor()),
-                csv(point.getTopBottom()),
-                csv(point.getReferenceBitmap()),
-                Integer.toString(count),
-
-                formatDouble(mean(sumDxPixel)),
-                formatDouble(mean(sumDyPixel)),
-                formatDouble(sampleStdDev(sumDxPixel, sumDxPixelSquared)),
-                formatDouble(sampleStdDev(sumDyPixel, sumDyPixelSquared)),
-                formatDouble(maxDxPixel - minDxPixel),
-                formatDouble(maxDyPixel - minDyPixel),
-
-                formatDouble(mean(sumDxMmRaw)),
-                formatDouble(mean(sumDyMmRaw)),
-                formatDouble(sampleStdDev(sumDxMmRaw, sumDxMmRawSquared)),
-                formatDouble(sampleStdDev(sumDyMmRaw, sumDyMmRawSquared)),
-                formatDouble(maxDxMmRaw - minDxMmRaw),
-                formatDouble(maxDyMmRaw - minDyMmRaw),
-
-                formatDouble(mean(sumPeak)),
-                formatDouble(minPeak),
-                formatDouble(maxPeak),
-                Long.toString(maxDt));
-    }
-
-    private double mean(double sum) {
-        if (count == 0) {
-            return 0.0;
-        }
-
-        return sum / count;
-    }
-
-    private double sampleStdDev(double sum, double sumSquared) {
-        if (count < 2) {
-            return 0.0;
-        }
-
-        double variance = (sumSquared - (sum * sum / count)) / (count - 1);
-
-        if (variance < 0.0 && variance > -1.0e-12) {
-            variance = 0.0;
-        }
-
-        return Math.sqrt(variance);
-    }
-}
-
+    
 }

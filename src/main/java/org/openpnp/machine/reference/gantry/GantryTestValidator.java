@@ -1,14 +1,12 @@
 package org.openpnp.machine.reference.gantry;
 
+import java.util.ArrayList;
 import java.util.Locale;
-
+import java.util.stream.Stream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
 
 import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
 import org.openpnp.spi.Camera;
@@ -164,85 +162,33 @@ public final class GantryTestValidator {
         String referenceBitmap = point.getReferenceBitmap();
 
         if (referenceBitmap == null || referenceBitmap.trim().isEmpty()) {
-            result.addError(row + ": Ref_bmp is empty.");
+            result.addError(row + ": Ref_Bmp is empty.");
             return false;
         }
 
         String trimmed = referenceBitmap.trim();
 
         if (!trimmed.toLowerCase(Locale.US).endsWith(".bmp")) {
-            result.addError(row + ": Ref_bmp must end with .bmp. Ref_bmp=\"" + trimmed + "\".");
+            result.addError(row + ": Ref_Bmp must end with .bmp. Ref_Bmp=\"" + trimmed + "\".");
             return false;
         }
 
-        if (trimmed.contains("\\") || trimmed.contains("/")) {
-            result.addWarning(row + ": Ref_bmp should normally be a filename only, not a full path. Ref_bmp=\""
+        Path referenceBitmapPath = Paths.get(trimmed);
+
+        if (!referenceBitmapPath.isAbsolute()) {
+            result.addError(row + ": Ref_Bmp must be a full absolute Windows path. Ref_Bmp=\""
                     + trimmed + "\".");
-        }
-
-        Path directPath = Paths.get(trimmed);
-
-        if (directPath.isAbsolute()) {
-            if (Files.isRegularFile(directPath)) {
-                result.addMessage(row + ": Ref_bmp file found = " + directPath);
-                return true;
-            }
-
-            result.addError(row + ": Ref_bmp file not found = " + directPath);
             return false;
         }
 
-        Path foundPath = findReferenceBitmap(trimmed, point, csvSourceFile);
-
-        if (foundPath != null) {
-            result.addMessage(row + ": Ref_bmp file found = " + foundPath);
-            return true;
+        if (!Files.isRegularFile(referenceBitmapPath)) {
+            result.addError(row + ": Ref_Bmp file not found = " + referenceBitmapPath);
+            return false;
         }
 
-        result.addError(row + ": Ref_bmp file not found. Ref_bmp=\"" + trimmed
-                + "\". Checked CSV folder and C:\\Opulo\\Data\\Reference Images.");
-        return false;
-    }
+        result.addMessage(row + ": Ref_Bmp absolute file found = " + referenceBitmapPath);
 
-    private static Path findReferenceBitmap(String referenceBitmap, GantryTestPoint point, Path csvSourceFile) {
-        List<Path> candidates = new ArrayList<>();
-
-        if (csvSourceFile != null && csvSourceFile.getParent() != null) {
-            candidates.add(csvSourceFile.getParent().resolve(referenceBitmap));
-        }
-
-        Path referenceImagesRoot = Paths.get("C:\\Opulo\\Data\\Reference Images");
-
-        if (point.getName() != null && !point.getName().trim().isEmpty()) {
-            candidates.add(referenceImagesRoot.resolve(point.getName().trim()).resolve(referenceBitmap));
-        }
-
-        candidates.add(referenceImagesRoot.resolve(referenceBitmap));
-
-        for (Path candidate : candidates) {
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
-            }
-        }
-
-        return findFileBelow(referenceImagesRoot, referenceBitmap, 4);
-    }
-
-    private static Path findFileBelow(Path root, String filename, int maxDepth) {
-        if (root == null || filename == null || !Files.isDirectory(root)) {
-            return null;
-        }
-
-        try (Stream<Path> stream = Files.walk(root, maxDepth)) {
-            return stream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName() != null)
-                    .filter(path -> filename.equalsIgnoreCase(path.getFileName().toString()))
-                    .findFirst()
-                    .orElse(null);
-        } catch (IOException e) {
-            return null;
-        }
+        return true;
     }
 
     private static boolean isValidCropFactor(int cropFactor) {
