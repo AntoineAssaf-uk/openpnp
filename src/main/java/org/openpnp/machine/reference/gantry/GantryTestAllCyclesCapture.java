@@ -63,13 +63,20 @@ public final class GantryTestAllCyclesCapture {
         Head head = ReferenceMachineLookup.findHead(machine, ReferenceMachineLookup.HEAD_H1);
         Camera topCamera = ReferenceMachineLookup.findDefaultHeadCamera(head);
 
+        Location topCameraUnitsPerPixel = topCamera.getUnitsPerPixelAtZ()
+                .convertToUnits(LengthUnit.Millimeters);
+
         Path outputFolder = createOutputFolder(input);
 
         Path outputCsvFile = outputFolder.resolve("Gantry Test output.csv");
 
         List<String> resultCsvLines = new ArrayList<>();
+
         resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
-                + "Ref_bmp,Reference_File,Captured_Crop_File,d_x_pixel,d_y_pixel,peak,dt_ms");
+                + "Ref_bmp,Reference_File,Captured_Crop_File,"
+                + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
+                + "top_camera_upp_x_mm_per_pixel,top_camera_upp_y_mm_per_pixel,"
+                + "peak,dt_ms");
 
         StringBuilder sb = new StringBuilder();
 
@@ -88,6 +95,11 @@ public final class GantryTestAllCyclesCapture {
                 MOVE_SPEED)).append(System.lineSeparator());
         sb.append("Output folder = ").append(outputFolder).append(System.lineSeparator());
         sb.append("Output CSV = ").append(outputCsvFile).append(System.lineSeparator());
+
+        sb.append(String.format(Locale.US,
+                "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
+                topCameraUnitsPerPixel.getX(),
+                topCameraUnitsPerPixel.getY())).append(System.lineSeparator());
 
         int visitIndex = 0;
 
@@ -209,7 +221,8 @@ public final class GantryTestAllCyclesCapture {
                         point,
                         referenceBitmapFile,
                         cropFile,
-                        offsetResult));
+                        offsetResult,
+                        topCameraUnitsPerPixel));
             }
         }
 
@@ -251,7 +264,11 @@ public final class GantryTestAllCyclesCapture {
             GantryTestPoint point,
             Path referenceBitmapFile,
             Path capturedCropFile,
-            CsImageOffsetResult offsetResult) {
+            CsImageOffsetResult offsetResult,
+            Location unitsPerPixel) {
+
+        double dxMmRaw = offsetResult.getDx() * unitsPerPixel.getX();
+        double dyMmRaw = offsetResult.getDy() * unitsPerPixel.getY();
         return String.join(",",
                 Integer.toString(cycle),
                 Integer.toString(visit),
@@ -269,6 +286,10 @@ public final class GantryTestAllCyclesCapture {
                 csv(capturedCropFile.toString()),
                 formatDouble(offsetResult.getDx()),
                 formatDouble(offsetResult.getDy()),
+                formatDouble(dxMmRaw),
+                formatDouble(dyMmRaw),
+                formatDouble(unitsPerPixel.getX()),
+                formatDouble(unitsPerPixel.getY()),
                 formatDouble(offsetResult.getPeak()),
                 Long.toString(offsetResult.getDt()));
     }
