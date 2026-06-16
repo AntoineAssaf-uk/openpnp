@@ -10,6 +10,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
@@ -70,6 +72,10 @@ public final class GantryTestAllCyclesCapture {
 
         Path outputCsvFile = outputFolder.resolve("Gantry Test output.csv");
 
+        Path summaryCsvFile = outputFolder.resolve("Gantry Test summary.csv");
+
+Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
+
         List<String> resultCsvLines = new ArrayList<>();
 
         resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
@@ -95,6 +101,7 @@ public final class GantryTestAllCyclesCapture {
                 MOVE_SPEED)).append(System.lineSeparator());
         sb.append("Output folder = ").append(outputFolder).append(System.lineSeparator());
         sb.append("Output CSV = ").append(outputCsvFile).append(System.lineSeparator());
+        sb.append("Summary CSV = ").append(summaryCsvFile).append(System.lineSeparator());
 
         sb.append(String.format(Locale.US,
                 "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
@@ -223,13 +230,25 @@ public final class GantryTestAllCyclesCapture {
                         cropFile,
                         offsetResult,
                         topCameraUnitsPerPixel));
+
+SummaryAccumulator summary = summaryByPoint.computeIfAbsent(
+        point.getIndex(),
+        key -> new SummaryAccumulator(point));
+
+summary.add(offsetResult, topCameraUnitsPerPixel);
+
+
             }
         }
 
-        Files.write(outputCsvFile, resultCsvLines, StandardCharsets.UTF_8);
+List<String> summaryCsvLines = buildSummaryCsvLines(summaryByPoint);
 
-        sb.append("Saved output CSV = ").append(outputCsvFile).append(System.lineSeparator());
-        sb.append("Gantry Test all cycles capture PASSED.");
+Files.write(outputCsvFile, resultCsvLines, StandardCharsets.UTF_8);
+Files.write(summaryCsvFile, summaryCsvLines, StandardCharsets.UTF_8);
+
+sb.append("Saved output CSV = ").append(outputCsvFile).append(System.lineSeparator());
+sb.append("Saved summary CSV = ").append(summaryCsvFile).append(System.lineSeparator());
+sb.append("Gantry Test all cycles capture PASSED.");
 
         return sb.toString();
     }
@@ -326,4 +345,144 @@ public final class GantryTestAllCyclesCapture {
             throw new Exception("No BMP image writer is available for file: " + file);
         }
     }
+
+    private static List<String> buildSummaryCsvLines(Map<Integer, SummaryAccumulator> summaryByPoint) {
+    List<String> lines = new ArrayList<>();
+
+    lines.add("Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,Ref_bmp,count,"
+            + "d_x_pixel_mean,d_y_pixel_mean,d_x_pixel_stddev,d_y_pixel_stddev,"
+            + "d_x_pixel_range,d_y_pixel_range,"
+            + "d_x_mm_raw_mean,d_y_mm_raw_mean,d_x_mm_raw_stddev,d_y_mm_raw_stddev,"
+            + "d_x_mm_raw_range,d_y_mm_raw_range,"
+            + "peak_mean,peak_min,peak_max,dt_ms_max");
+
+    for (SummaryAccumulator summary : summaryByPoint.values()) {
+        lines.add(summary.toCsvLine());
+    }
+
+    return lines;
+}
+
+private static final class SummaryAccumulator {
+    private final GantryTestPoint point;
+
+    private int count;
+
+    private double sumDxPixel;
+    private double sumDyPixel;
+    private double sumDxPixelSquared;
+    private double sumDyPixelSquared;
+    private double minDxPixel = Double.POSITIVE_INFINITY;
+    private double maxDxPixel = Double.NEGATIVE_INFINITY;
+    private double minDyPixel = Double.POSITIVE_INFINITY;
+    private double maxDyPixel = Double.NEGATIVE_INFINITY;
+
+    private double sumDxMmRaw;
+    private double sumDyMmRaw;
+    private double sumDxMmRawSquared;
+    private double sumDyMmRawSquared;
+    private double minDxMmRaw = Double.POSITIVE_INFINITY;
+    private double maxDxMmRaw = Double.NEGATIVE_INFINITY;
+    private double minDyMmRaw = Double.POSITIVE_INFINITY;
+    private double maxDyMmRaw = Double.NEGATIVE_INFINITY;
+
+    private double sumPeak;
+    private double minPeak = Double.POSITIVE_INFINITY;
+    private double maxPeak = Double.NEGATIVE_INFINITY;
+    private long maxDt;
+
+    SummaryAccumulator(GantryTestPoint point) {
+        this.point = point;
+    }
+
+    void add(CsImageOffsetResult offsetResult, Location unitsPerPixel) {
+        double dxPixel = offsetResult.getDx();
+        double dyPixel = offsetResult.getDy();
+        double dxMmRaw = dxPixel * unitsPerPixel.getX();
+        double dyMmRaw = dyPixel * unitsPerPixel.getY();
+        double peak = offsetResult.getPeak();
+
+        count++;
+
+        sumDxPixel += dxPixel;
+        sumDyPixel += dyPixel;
+        sumDxPixelSquared += dxPixel * dxPixel;
+        sumDyPixelSquared += dyPixel * dyPixel;
+        minDxPixel = Math.min(minDxPixel, dxPixel);
+        maxDxPixel = Math.max(maxDxPixel, dxPixel);
+        minDyPixel = Math.min(minDyPixel, dyPixel);
+        maxDyPixel = Math.max(maxDyPixel, dyPixel);
+
+        sumDxMmRaw += dxMmRaw;
+        sumDyMmRaw += dyMmRaw;
+        sumDxMmRawSquared += dxMmRaw * dxMmRaw;
+        sumDyMmRawSquared += dyMmRaw * dyMmRaw;
+        minDxMmRaw = Math.min(minDxMmRaw, dxMmRaw);
+        maxDxMmRaw = Math.max(maxDxMmRaw, dxMmRaw);
+        minDyMmRaw = Math.min(minDyMmRaw, dyMmRaw);
+        maxDyMmRaw = Math.max(maxDyMmRaw, dyMmRaw);
+
+        sumPeak += peak;
+        minPeak = Math.min(minPeak, peak);
+        maxPeak = Math.max(maxPeak, peak);
+        maxDt = Math.max(maxDt, offsetResult.getDt());
+    }
+
+    String toCsvLine() {
+        return String.join(",",
+                Integer.toString(point.getIndex()),
+                Integer.toString(point.getLineNumber()),
+                csv(point.getName()),
+                formatDouble(point.getX()),
+                formatDouble(point.getY()),
+                csv(point.getNozzleName()),
+                formatDouble(point.getNozzleZ()),
+                Integer.toString(point.getCropFactor()),
+                csv(point.getTopBottom()),
+                csv(point.getReferenceBitmap()),
+                Integer.toString(count),
+
+                formatDouble(mean(sumDxPixel)),
+                formatDouble(mean(sumDyPixel)),
+                formatDouble(sampleStdDev(sumDxPixel, sumDxPixelSquared)),
+                formatDouble(sampleStdDev(sumDyPixel, sumDyPixelSquared)),
+                formatDouble(maxDxPixel - minDxPixel),
+                formatDouble(maxDyPixel - minDyPixel),
+
+                formatDouble(mean(sumDxMmRaw)),
+                formatDouble(mean(sumDyMmRaw)),
+                formatDouble(sampleStdDev(sumDxMmRaw, sumDxMmRawSquared)),
+                formatDouble(sampleStdDev(sumDyMmRaw, sumDyMmRawSquared)),
+                formatDouble(maxDxMmRaw - minDxMmRaw),
+                formatDouble(maxDyMmRaw - minDyMmRaw),
+
+                formatDouble(mean(sumPeak)),
+                formatDouble(minPeak),
+                formatDouble(maxPeak),
+                Long.toString(maxDt));
+    }
+
+    private double mean(double sum) {
+        if (count == 0) {
+            return 0.0;
+        }
+
+        return sum / count;
+    }
+
+    private double sampleStdDev(double sum, double sumSquared) {
+        if (count < 2) {
+            return 0.0;
+        }
+
+        double variance = (sumSquared - (sum * sum / count)) / (count - 1);
+
+        if (variance < 0.0 && variance > -1.0e-12) {
+            variance = 0.0;
+        }
+
+        return Math.sqrt(variance);
+    }
+}
+
 }
