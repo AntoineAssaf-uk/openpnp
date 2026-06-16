@@ -1,11 +1,14 @@
 package org.openpnp.machine.reference.gantry;
 
 import java.awt.image.BufferedImage;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import javax.imageio.ImageIO;
@@ -62,6 +65,12 @@ public final class GantryTestAllCyclesCapture {
 
         Path outputFolder = createOutputFolder(input);
 
+        Path outputCsvFile = outputFolder.resolve("Gantry Test output.csv");
+
+        List<String> resultCsvLines = new ArrayList<>();
+        resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
+                + "Ref_bmp,Reference_File,Captured_Crop_File,d_x_pixel,d_y_pixel,peak,dt_ms");
+
         StringBuilder sb = new StringBuilder();
 
         sb.append("Gantry Test all cycles capture").append(System.lineSeparator());
@@ -78,6 +87,7 @@ public final class GantryTestAllCyclesCapture {
                 "Move speed = %.2f of machine max speed",
                 MOVE_SPEED)).append(System.lineSeparator());
         sb.append("Output folder = ").append(outputFolder).append(System.lineSeparator());
+        sb.append("Output CSV = ").append(outputCsvFile).append(System.lineSeparator());
 
         int visitIndex = 0;
 
@@ -192,9 +202,20 @@ public final class GantryTestAllCyclesCapture {
                         offsetResult.getDy(),
                         offsetResult.getPeak(),
                         offsetResult.getDt())).append(System.lineSeparator());
+
+                resultCsvLines.add(buildResultCsvLine(
+                        cycle,
+                        visitIndex,
+                        point,
+                        referenceBitmapFile,
+                        cropFile,
+                        offsetResult));
             }
         }
 
+        Files.write(outputCsvFile, resultCsvLines, StandardCharsets.UTF_8);
+
+        sb.append("Saved output CSV = ").append(outputCsvFile).append(System.lineSeparator());
         sb.append("Gantry Test all cycles capture PASSED.");
 
         return sb.toString();
@@ -222,6 +243,55 @@ public final class GantryTestAllCyclesCapture {
                 cycle,
                 point.getIndex(),
                 point.getLineNumber());
+    }
+
+    private static String buildResultCsvLine(
+            int cycle,
+            int visit,
+            GantryTestPoint point,
+            Path referenceBitmapFile,
+            Path capturedCropFile,
+            CsImageOffsetResult offsetResult) {
+        return String.join(",",
+                Integer.toString(cycle),
+                Integer.toString(visit),
+                Integer.toString(point.getIndex()),
+                Integer.toString(point.getLineNumber()),
+                csv(point.getName()),
+                formatDouble(point.getX()),
+                formatDouble(point.getY()),
+                csv(point.getNozzleName()),
+                formatDouble(point.getNozzleZ()),
+                Integer.toString(point.getCropFactor()),
+                csv(point.getTopBottom()),
+                csv(point.getReferenceBitmap()),
+                csv(referenceBitmapFile.toString()),
+                csv(capturedCropFile.toString()),
+                formatDouble(offsetResult.getDx()),
+                formatDouble(offsetResult.getDy()),
+                formatDouble(offsetResult.getPeak()),
+                Long.toString(offsetResult.getDt()));
+    }
+
+    private static String formatDouble(double value) {
+        return String.format(Locale.US, "%.9f", value);
+    }
+
+    private static String csv(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        boolean mustQuote = value.contains(",")
+                || value.contains("\"")
+                || value.contains("\r")
+                || value.contains("\n");
+
+        if (!mustQuote) {
+            return value;
+        }
+
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     private static void saveBmp(BufferedImage image, Path file) throws Exception {
