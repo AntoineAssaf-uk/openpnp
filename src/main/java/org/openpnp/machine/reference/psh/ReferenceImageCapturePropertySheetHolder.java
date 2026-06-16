@@ -42,16 +42,15 @@ import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 import org.openpnp.machine.reference.lookup.ReferenceMachineLookup;
 import org.openpnp.machine.reference.gantry.GantryTestCsvInput;
 import org.openpnp.machine.reference.gantry.GantryTestCsvParser;
+import org.openpnp.machine.reference.gantry.GantryTestDryRun;
+import org.openpnp.machine.reference.gantry.GantryTestSingleCycleCapture;
+import org.openpnp.machine.reference.gantry.GantryTestSingleCycleMove;
+import org.openpnp.machine.reference.gantry.GantryTestSingleMove;
+import org.openpnp.machine.reference.gantry.GantryTestSinglePointCapture;
 import org.openpnp.machine.reference.gantry.GantryTestValidationResult;
 import org.openpnp.machine.reference.gantry.GantryTestValidator;
-import org.openpnp.machine.reference.gantry.GantryTestDryRun;
-import org.openpnp.machine.reference.gantry.GantryTestSingleMove;
-import org.openpnp.machine.reference.gantry.GantryTestSingleCycleMove;
-import org.openpnp.machine.reference.gantry.GantryTestAllCyclesMove;
-import org.openpnp.machine.reference.gantry.GantryTestSinglePointCapture;
-import org.openpnp.machine.reference.gantry.GantryTestSingleCycleCapture;
 import org.openpnp.machine.reference.gantry.GantryTestAllCyclesCapture;
-
+import org.openpnp.machine.reference.gantry.GantryTestAllCyclesMove;
 
 public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHolder {
     private static final String TITLE = "Capture Reference Images";
@@ -376,17 +375,10 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         final File[] gantryTestInputFile = new File[1];
 
         JTextField gantryTestInputTextField = new JTextField(64);
+
         gantryTestInputTextField.setEditable(false);
 
         JButton gantryTestInputBrowseButton = new JButton("Select Gantry CSV");
-        JButton gantryTestCsvParseButton = new JButton("CSV Parse Test");
-        JButton gantryTestCsvValidateButton = new JButton("CSV Validate Test");
-        JButton gantryTestDryRunButton = new JButton("Execution Dry Run");
-        JButton gantryTestMoveFirstPointButton = new JButton("Move Point 1");
-        JButton gantryTestMoveCycleOneButton = new JButton("Move Cycle 1");
-        JButton gantryTestMoveAllCyclesButton = new JButton("Move All Cycles");
-        JButton gantryTestCapturePointOneButton = new JButton("Capture Point 1");
-        JButton gantryTestCaptureCycleOneButton = new JButton("Capture Cycle 1");
         JButton gantryTestCaptureAllCyclesButton = new JButton("Capture All Cycles");
 
         gantryTestInputBrowseButton.addActionListener((ActionEvent e) -> {
@@ -399,370 +391,6 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
 
                 ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV selected: %s", selectedFile.getAbsolutePath());
             }
-        });
-
-        gantryTestCsvParseButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV parse cancelled: no CSV selected.");
-                return;
-            }
-
-            gantryTestCsvParseButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV parse started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                return GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-            }, (GantryTestCsvInput input) -> {
-                gantryTestCsvParseButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(input.describe());
-            }, (throwable) -> {
-                gantryTestCsvParseButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test CSV parse failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestCsvValidateButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV validation cancelled: no CSV selected.");
-                return;
-            }
-
-            gantryTestCsvValidateButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test CSV validation started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-
-                return GantryTestValidator.validate(input);
-            }, (GantryTestValidationResult result) -> {
-                gantryTestCsvValidateButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result.describe());
-            }, (throwable) -> {
-                gantryTestCsvValidateButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test CSV validation failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestDryRunButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test execution dry-run cancelled: no CSV selected.");
-                return;
-            }
-
-            gantryTestDryRunButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test execution dry-run started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test execution dry-run CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestDryRun.describe(input);
-            }, (String result) -> {
-                gantryTestDryRunButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestDryRunButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test execution dry-run failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestMoveFirstPointButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test single move cancelled: no CSV selected.");
-                return;
-            }
-
-            int confirmation = JOptionPane.showConfirmDialog(
-                    panel,
-                    "This will move the real machine to the FIRST Gantry Test CSV point only.\n\n"
-                            + "No image capture will be performed.\n"
-                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
-                            + "Continue?",
-                    "Confirm Gantry Test Motion",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-            if (confirmation != JOptionPane.YES_OPTION) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test single move cancelled by user.");
-                return;
-            }
-
-            gantryTestMoveFirstPointButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test single move started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test single move CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestSingleMove.moveFirstPoint(input);
-            }, (String result) -> {
-                gantryTestMoveFirstPointButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestMoveFirstPointButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test single move failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestMoveCycleOneButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test move cycle 1 cancelled: no CSV selected.");
-                return;
-            }
-
-            int confirmation = JOptionPane.showConfirmDialog(
-                    panel,
-                    "This will move the real machine through ALL Gantry Test CSV points ONCE.\n\n"
-                            + "The CSV Number of cycles will be ignored for this test.\n"
-                            + "No image capture will be performed.\n\n"
-                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
-                            + "Continue?",
-                    "Confirm Gantry Test Cycle 1 Motion",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-            if (confirmation != JOptionPane.YES_OPTION) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test move cycle 1 cancelled by user.");
-                return;
-            }
-
-            gantryTestMoveCycleOneButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test move cycle 1 started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test move cycle 1 CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestSingleCycleMove.moveCycleOne(input);
-            }, (String result) -> {
-                gantryTestMoveCycleOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestMoveCycleOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test move cycle 1 failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestMoveAllCyclesButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test move all cycles cancelled: no CSV selected.");
-                return;
-            }
-
-            int confirmation = JOptionPane.showConfirmDialog(
-                    panel,
-                    "This will move the real machine through ALL Gantry Test CSV points\n"
-                            + "for ALL cycles specified in the CSV.\n\n"
-                            + "No image capture will be performed.\n\n"
-                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
-                            + "Continue?",
-                    "Confirm Gantry Test All Cycles Motion",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-            if (confirmation != JOptionPane.YES_OPTION) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test move all cycles cancelled by user.");
-                return;
-            }
-
-            gantryTestMoveAllCyclesButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test move all cycles started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test move all cycles CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestAllCyclesMove.moveAllCycles(input);
-            }, (String result) -> {
-                gantryTestMoveAllCyclesButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestMoveAllCyclesButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test move all cycles failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestCapturePointOneButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test capture point 1 cancelled: no CSV selected.");
-                return;
-            }
-
-            int confirmation = JOptionPane.showConfirmDialog(
-                    panel,
-                    "This will move the real machine to the FIRST Gantry Test CSV point\n"
-                            + "and capture one Top or Bottom camera image.\n\n"
-                            + "Original BMP, mono BMP and mono crop BMP will be saved.\n"
-                            + "No image offset calculation will be performed yet.\n\n"
-                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
-                            + "Continue?",
-                    "Confirm Gantry Test Point 1 Capture",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-            if (confirmation != JOptionPane.YES_OPTION) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test capture point 1 cancelled by user.");
-                return;
-            }
-
-            gantryTestCapturePointOneButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test capture point 1 started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test capture point 1 CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestSinglePointCapture.moveAndCaptureFirstPoint(input);
-            }, (String result) -> {
-                gantryTestCapturePointOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestCapturePointOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test capture point 1 failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
-        });
-
-        gantryTestCaptureCycleOneButton.addActionListener((ActionEvent e) -> {
-            if (gantryTestInputFile[0] == null) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test capture cycle 1 cancelled: no CSV selected.");
-                return;
-            }
-
-            int confirmation = JOptionPane.showConfirmDialog(
-                    panel,
-                    "This will move the real machine through ALL Gantry Test CSV points ONCE\n"
-                            + "and capture one Top or Bottom camera image at each point.\n\n"
-                            + "The CSV Number of cycles will be ignored for this test.\n"
-                            + "Original BMP, mono BMP and mono crop BMP will be saved for each point.\n"
-                            + "No image offset calculation will be performed yet.\n\n"
-                            + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
-                            + "Continue?",
-                    "Confirm Gantry Test Cycle 1 Capture",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-
-            if (confirmation != JOptionPane.YES_OPTION) {
-                ReferenceMachineDebugLog.debugPrintf("Gantry Test capture cycle 1 cancelled by user.");
-                return;
-            }
-
-            gantryTestCaptureCycleOneButton.setEnabled(false);
-
-            ReferenceMachineDebugLog.debugPrintf("Gantry Test capture cycle 1 started.");
-            ReferenceMachineDebugLog.debugPrintf("Input CSV: %s", gantryTestInputFile[0].getAbsolutePath());
-
-            UiUtils.submitUiMachineTask(() -> {
-                GantryTestCsvInput input = GantryTestCsvParser.read(gantryTestInputFile[0].toPath());
-                GantryTestValidationResult validationResult = GantryTestValidator.validate(input);
-
-                if (!validationResult.isPassed()) {
-                    return validationResult.describe()
-                            + System.lineSeparator()
-                            + "Gantry Test capture cycle 1 CANCELLED because validation failed.";
-                }
-
-                return validationResult.describe()
-                        + System.lineSeparator()
-                        + System.lineSeparator()
-                        + GantryTestSingleCycleCapture.moveAndCaptureCycleOne(input);
-            }, (String result) -> {
-                gantryTestCaptureCycleOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugPrintln(result);
-            }, (throwable) -> {
-                gantryTestCaptureCycleOneButton.setEnabled(true);
-
-                ReferenceMachineDebugLog.debugException("Gantry Test capture cycle 1 failed", throwable);
-
-                UiUtils.showError(throwable);
-            });
         });
 
         gantryTestCaptureAllCyclesButton.addActionListener((ActionEvent e) -> {
@@ -840,49 +468,19 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
         gantryCsvTextConstraints.insets = new Insets(0, 0, 4, 8);
         gantryTestPanel.add(gantryTestInputTextField, gantryCsvTextConstraints);
 
-        GridBagConstraints gantryCsvBrowseButtonConstraints = new GridBagConstraints();
-        gantryCsvBrowseButtonConstraints.gridx = 2;
-        gantryCsvBrowseButtonConstraints.gridy = 0;
-        gantryCsvBrowseButtonConstraints.anchor = GridBagConstraints.WEST;
-        gantryCsvBrowseButtonConstraints.insets = new Insets(0, 0, 4, 0);
-        gantryTestPanel.add(gantryTestInputBrowseButton, gantryCsvBrowseButtonConstraints);
+        JPanel gantryButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 
-        JPanel gantryButtonPanel = new JPanel();
-        gantryButtonPanel.setLayout(new BoxLayout(gantryButtonPanel, BoxLayout.Y_AXIS));
-
-        JPanel gantryButtonRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JPanel gantryButtonRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JPanel gantryButtonRow3 = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-
-        gantryButtonRow1.add(gantryTestCsvParseButton);
-        gantryButtonRow1.add(Box.createHorizontalStrut(4));
-        gantryButtonRow1.add(gantryTestCsvValidateButton);
-        gantryButtonRow1.add(Box.createHorizontalStrut(4));
-        gantryButtonRow1.add(gantryTestDryRunButton);
-
-        gantryButtonRow2.add(gantryTestMoveFirstPointButton);
-        gantryButtonRow2.add(Box.createHorizontalStrut(4));
-        gantryButtonRow2.add(gantryTestCapturePointOneButton);
-        gantryButtonRow2.add(Box.createHorizontalStrut(4));
-        gantryButtonRow2.add(gantryTestMoveCycleOneButton);
-        gantryButtonRow2.add(Box.createHorizontalStrut(4));
-        gantryButtonRow2.add(gantryTestCaptureCycleOneButton);
-
-        gantryButtonRow3.add(gantryTestMoveAllCyclesButton);
-        gantryButtonRow3.add(Box.createHorizontalStrut(4));
-        gantryButtonRow3.add(gantryTestCaptureAllCyclesButton);
-
-        gantryButtonPanel.add(gantryButtonRow1);
-        gantryButtonPanel.add(Box.createVerticalStrut(4));
-        gantryButtonPanel.add(gantryButtonRow2);
-        gantryButtonPanel.add(Box.createVerticalStrut(4));
-        gantryButtonPanel.add(gantryButtonRow3);
+        gantryButtonPanel.add(gantryTestInputBrowseButton);
+        gantryButtonPanel.add(Box.createHorizontalStrut(8));
+        gantryButtonPanel.add(gantryTestCaptureAllCyclesButton);
 
         GridBagConstraints gantryButtonPanelConstraints = new GridBagConstraints();
+
         gantryButtonPanelConstraints.gridx = 1;
         gantryButtonPanelConstraints.gridy = 1;
         gantryButtonPanelConstraints.anchor = GridBagConstraints.WEST;
         gantryButtonPanelConstraints.insets = new Insets(4, 0, 0, 0);
+
         gantryTestPanel.add(gantryButtonPanel, gantryButtonPanelConstraints);
 
         panel.add(imageCaptureButtonPanel);
