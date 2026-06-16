@@ -53,7 +53,7 @@ public final class GantryTestSingleCycleCapture {
         sb.append("Only cycle 1 will be moved and captured.").append(System.lineSeparator());
         sb.append("CSV Number of cycles is ignored in this step.").append(System.lineSeparator());
         sb.append("Only Top camera capture is supported in this step.").append(System.lineSeparator());
-        sb.append("No image offset calculation will be performed.").append(System.lineSeparator());
+        sb.append("Image offset calculation will be performed for each captured mono crop.").append(System.lineSeparator());
         sb.append("Point count = ").append(input.getPoints().size()).append(System.lineSeparator());
         sb.append(String.format(Locale.US,
                 "Move speed = %.2f of machine max speed",
@@ -66,7 +66,7 @@ public final class GantryTestSingleCycleCapture {
             pointVisit++;
 
             if (!"Top".equals(point.getTopBottom())) {
-                throw new Exception("Step 4.9 only supports Top camera capture. "
+                throw new Exception("Step 4.11 only supports Top camera capture. "
                         + "Line " + point.getLineNumber()
                         + " has Top_Bot=" + point.getTopBottom());
             }
