@@ -663,7 +663,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             int confirmation = JOptionPane.showConfirmDialog(
                     panel,
                     "This will move the real machine to the FIRST Gantry Test CSV point\n"
-                            + "and capture one Top camera image.\n\n"
+                            + "and capture one Top or Bottom camera image.\n\n"
                             + "Original BMP, mono BMP and mono crop BMP will be saved.\n"
                             + "No image offset calculation will be performed yet.\n\n"
                             + "Make sure the machine is clear and you are ready to stop it if needed.\n\n"
@@ -718,7 +718,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             int confirmation = JOptionPane.showConfirmDialog(
                     panel,
                     "This will move the real machine through ALL Gantry Test CSV points ONCE\n"
-                            + "and capture one Top camera image at each point.\n\n"
+                            + "and capture one Top or Bottom camera image at each point.\n\n"
                             + "The CSV Number of cycles will be ignored for this test.\n"
                             + "Original BMP, mono BMP and mono crop BMP will be saved for each point.\n"
                             + "No image offset calculation will be performed yet.\n\n"
@@ -774,7 +774,7 @@ public class ReferenceImageCapturePropertySheetHolder implements PropertySheetHo
             int confirmation = JOptionPane.showConfirmDialog(
                     panel,
                     "This will move the real machine through ALL Gantry Test CSV points\n"
-                            + "for ALL cycles specified in the CSV and capture one Top camera image\n"
+                            + "for ALL cycles specified in the CSV and capture one Top or Bottom camera image\n"
                             + "at every point visit.\n\n"
                             + "Original BMP, mono BMP and mono crop BMP will be saved for every visit.\n"
                             + "No image offset calculation will be performed yet.\n\n"

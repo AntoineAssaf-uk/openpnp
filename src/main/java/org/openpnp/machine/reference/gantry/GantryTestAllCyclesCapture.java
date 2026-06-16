@@ -25,6 +25,7 @@ import org.openpnp.spi.Machine;
 import org.openpnp.util.MovableUtils;
 import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
 import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
+import org.openpnp.spi.Nozzle;
 
 public final class GantryTestAllCyclesCapture {
     private static final double MOVE_SPEED = 0.20;
@@ -63,10 +64,13 @@ public final class GantryTestAllCyclesCapture {
         ReferenceMachineLookup.requireMachineEnabledAndHomed(machine);
 
         Head head = ReferenceMachineLookup.findHead(machine, ReferenceMachineLookup.HEAD_H1);
-        Camera topCamera = ReferenceMachineLookup.findDefaultHeadCamera(head);
+Camera topCamera = ReferenceMachineLookup.findDefaultHeadCamera(head);
+Camera bottomCamera = ReferenceMachineLookup.findMachineCamera(machine, ReferenceMachineLookup.BOTTOM_CAMERA);
 
-        Location topCameraUnitsPerPixel = topCamera.getUnitsPerPixelAtZ()
-                .convertToUnits(LengthUnit.Millimeters);
+Location topCameraUnitsPerPixel = topCamera.getUnitsPerPixelAtZ()
+        .convertToUnits(LengthUnit.Millimeters);
+Location bottomCameraUnitsPerPixel = bottomCamera.getUnitsPerPixelAtZ()
+        .convertToUnits(LengthUnit.Millimeters);
 
         Path outputFolder = createOutputFolder(input);
 
@@ -78,18 +82,19 @@ Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
 
         List<String> resultCsvLines = new ArrayList<>();
 
-        resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
-                + "Ref_bmp,Reference_File,Captured_Crop_File,"
-                + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
-                + "top_camera_upp_x_mm_per_pixel,top_camera_upp_y_mm_per_pixel,"
-                + "peak,dt_ms");
+resultCsvLines.add("Cycle,Visit,Point,Line,Name,X,Y,Nozzle,N_Z,Crop_factor,Top_Bot,"
+        + "Ref_bmp,Reference_File,Captured_Crop_File,"
+        + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
+        + "camera_upp_x_mm_per_pixel,camera_upp_y_mm_per_pixel,"
+        + "peak,dt_ms");
 
         StringBuilder sb = new StringBuilder();
 
         sb.append("Gantry Test all cycles capture").append(System.lineSeparator());
         sb.append("REAL MACHINE MOTION WAS REQUESTED.").append(System.lineSeparator());
         sb.append("All CSV cycles will be moved and captured.").append(System.lineSeparator());
-        sb.append("Only Top camera capture is supported in this step.").append(System.lineSeparator());
+sb.append("Top and Bottom camera capture are supported according to CSV Top_Bot.")
+        .append(System.lineSeparator());
         sb.append("Image offset calculation will be performed for every captured mono crop.")
                 .append(System.lineSeparator());
         sb.append("Number of cycles = ").append(cycles).append(System.lineSeparator());
@@ -103,11 +108,15 @@ Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
         sb.append("Output CSV = ").append(outputCsvFile).append(System.lineSeparator());
         sb.append("Summary CSV = ").append(summaryCsvFile).append(System.lineSeparator());
 
-        sb.append(String.format(Locale.US,
-                "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
-                topCameraUnitsPerPixel.getX(),
-                topCameraUnitsPerPixel.getY())).append(System.lineSeparator());
+sb.append(String.format(Locale.US,
+        "Top camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
+        topCameraUnitsPerPixel.getX(),
+        topCameraUnitsPerPixel.getY())).append(System.lineSeparator());
 
+sb.append(String.format(Locale.US,
+        "Bottom camera units per pixel: X=%.9f mm/px, Y=%.9f mm/px",
+        bottomCameraUnitsPerPixel.getX(),
+        bottomCameraUnitsPerPixel.getY())).append(System.lineSeparator());
         int visitIndex = 0;
 
         for (int cycle = 1; cycle <= cycles; cycle++) {
@@ -119,52 +128,87 @@ Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
             for (GantryTestPoint point : input.getPoints()) {
                 visitIndex++;
 
-                if (!"Top".equals(point.getTopBottom())) {
-                    throw new Exception("Step 4.12 only supports Top camera capture. "
-                            + "Line " + point.getLineNumber()
-                            + " has Top_Bot=" + point.getTopBottom());
-                }
+boolean isTopPoint = "Top".equals(point.getTopBottom());
+boolean isBottomPoint = "Bot".equals(point.getTopBottom());
 
-                Location targetLocation = new Location(
-                        LengthUnit.Millimeters,
-                        point.getX(),
-                        point.getY(),
-                        Double.NaN,
-                        Double.NaN);
+if (!isTopPoint && !isBottomPoint) {
+    throw new Exception("Step 4.15 only supports Top or Bot camera capture. "
+            + "Line " + point.getLineNumber()
+            + " has Top_Bot=" + point.getTopBottom());
+}
 
-                sb.append(String.format(Locale.US,
-                        "  Visit %d / %d: cycle=%d, line=%d, #=%d, Name=\"%s\"",
-                        visitIndex,
-                        totalPointVisits,
-                        cycle,
-                        point.getLineNumber(),
-                        point.getIndex(),
-                        point.getName())).append(System.lineSeparator());
+Camera captureCamera;
+Location cameraUnitsPerPixel;
+Location finalLocation;
 
-                sb.append(String.format(Locale.US,
-                        "    Target Top camera location: X=%.6f mm, Y=%.6f mm",
-                        point.getX(),
-                        point.getY())).append(System.lineSeparator());
+if (isTopPoint) {
+    captureCamera = topCamera;
+    cameraUnitsPerPixel = topCameraUnitsPerPixel;
 
-                MovableUtils.moveToLocationAtSafeZ(topCamera, targetLocation, MOVE_SPEED);
+    Location targetLocation = new Location(
+            LengthUnit.Millimeters,
+            point.getX(),
+            point.getY(),
+            Double.NaN,
+            Double.NaN);
 
-                Location finalLocation = topCamera.getLocation();
+    sb.append(String.format(Locale.US,
+            "    Target Top camera location: X=%.6f mm, Y=%.6f mm",
+            point.getX(),
+            point.getY())).append(System.lineSeparator());
 
-                sb.append(String.format(Locale.US,
-                        "    Final Top camera location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
-                        finalLocation.getX(),
-                        finalLocation.getY(),
-                        finalLocation.getZ(),
-                        finalLocation.getRotation())).append(System.lineSeparator());
+    MovableUtils.moveToLocationAtSafeZ(topCamera, targetLocation, MOVE_SPEED);
 
-                sb.append("    Capturing Top camera image...").append(System.lineSeparator());
+    finalLocation = topCamera.getLocation();
 
-                BufferedImage originalImage = topCamera.lightSettleAndCapture();
+    sb.append(String.format(Locale.US,
+            "    Final Top camera location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
+            finalLocation.getX(),
+            finalLocation.getY(),
+            finalLocation.getZ(),
+            finalLocation.getRotation())).append(System.lineSeparator());
 
+    sb.append("    Capturing Top camera image...").append(System.lineSeparator());
+}
+else {
+    Nozzle nozzle = ReferenceMachineLookup.findNozzle(head, point.getNozzleName());
+
+    captureCamera = bottomCamera;
+    cameraUnitsPerPixel = bottomCameraUnitsPerPixel;
+
+    Location targetLocation = new Location(
+            LengthUnit.Millimeters,
+            point.getX(),
+            point.getY(),
+            point.getNozzleZ(),
+            Double.NaN);
+
+    sb.append(String.format(Locale.US,
+            "    Target nozzle %s location over Bottom camera: X=%.6f mm, Y=%.6f mm, Z=%.6f mm",
+            nozzle.getName(),
+            point.getX(),
+            point.getY(),
+            point.getNozzleZ())).append(System.lineSeparator());
+
+    MovableUtils.moveToLocationAtSafeZ(nozzle, targetLocation, MOVE_SPEED);
+
+    finalLocation = nozzle.getLocation();
+
+    sb.append(String.format(Locale.US,
+            "    Final nozzle %s location: X=%.6f mm, Y=%.6f mm, Z=%.6f mm, C=%.6f",
+            nozzle.getName(),
+            finalLocation.getX(),
+            finalLocation.getY(),
+            finalLocation.getZ(),
+            finalLocation.getRotation())).append(System.lineSeparator());
+
+    sb.append("    Capturing Bottom camera image...").append(System.lineSeparator());
+}
+
+BufferedImage originalImage = captureCamera.lightSettleAndCapture();
                 if (originalImage == null) {
-                    throw new Exception("Top camera capture returned null image at cycle "
-                            + cycle + ", line " + point.getLineNumber() + ".");
-                }
+throw new Exception(point.getTopBottom() + " camera capture returned null image at cycle "
+        + cycle + ", line " + point.getLineNumber() + ".");                }
 
                 BufferedImage monoImage = ReferenceImageCaptureService.createGrayscaleLuminosityImage(originalImage);
                 BufferedImage cropImage = ReferenceImageCaptureService.cropCentered(monoImage, point.getCropFactor());
@@ -222,14 +266,14 @@ Map<Integer, SummaryAccumulator> summaryByPoint = new LinkedHashMap<>();
                         offsetResult.getPeak(),
                         offsetResult.getDt())).append(System.lineSeparator());
 
-                resultCsvLines.add(buildResultCsvLine(
-                        cycle,
-                        visitIndex,
-                        point,
-                        referenceBitmapFile,
-                        cropFile,
-                        offsetResult,
-                        topCameraUnitsPerPixel));
+resultCsvLines.add(buildResultCsvLine(
+        cycle,
+        visitIndex,
+        point,
+        referenceBitmapFile,
+        cropFile,
+        offsetResult,
+        cameraUnitsPerPixel));
 
 SummaryAccumulator summary = summaryByPoint.computeIfAbsent(
         point.getIndex(),
@@ -269,13 +313,14 @@ sb.append("Gantry Test all cycles capture PASSED.");
         return outputFolder;
     }
 
-    private static String buildBaseFileName(int cycle, GantryTestPoint point) {
-        return String.format(Locale.US,
-                "Cycle_%03d_Point_%03d_Line_%03d_Top",
-                cycle,
-                point.getIndex(),
-                point.getLineNumber());
-    }
+private static String buildBaseFileName(int cycle, GantryTestPoint point) {
+    return String.format(Locale.US,
+            "Cycle_%03d_Point_%03d_Line_%03d_%s",
+            cycle,
+            point.getIndex(),
+            point.getLineNumber(),
+            point.getTopBottom());
+}
 
     private static String buildResultCsvLine(
             int cycle,
