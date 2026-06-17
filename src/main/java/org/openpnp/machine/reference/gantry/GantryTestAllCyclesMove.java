@@ -11,8 +11,8 @@ import org.openpnp.spi.Machine;
 import org.openpnp.util.MovableUtils;
 
 public final class GantryTestAllCyclesMove {
-    private static final double MOVE_SPEED = 0.20;
-    private static final int MAX_POINT_VISITS = 500;
+    private static final double MOVE_SPEED = 1.0;
+    private static final int MAX_POINT_VISITS = 10000;
 
     private GantryTestAllCyclesMove() {
     }

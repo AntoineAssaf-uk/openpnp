@@ -105,7 +105,7 @@ public final class CsImageOffset {
         long dt = System.currentTimeMillis() - start;
         imageOffsetInfo.append("dt= ").append(dt).append("\r\n");
 
-        return new CsImageOffsetResult(refinedDx, -refinedDy, peakVal, dt, imageOffsetInfo.toString());
+        return new CsImageOffsetResult(-refinedDx, +refinedDy, peakVal, dt, imageOffsetInfo.toString());
     }
 
     private static double[][] readAndConvertBitmapToArray(BufferedImage bmp, StringBuilder imageOffsetInfo) {
