@@ -70,9 +70,10 @@ public final class GantryTestAllCyclesCapture {
         Location bottomCameraUnitsPerPixel = bottomCamera.getUnitsPerPixelAtZ()
                 .convertToUnits(LengthUnit.Millimeters);
 
-        Path outputFolder = createOutputFolder(input);
+        String outputTimestamp = LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP);
 
-        Path outputCsvFile = outputFolder.resolve("Gantry Test output.csv");
+        Path outputFolder = createOutputFolder(input, outputTimestamp);
+        Path outputCsvFile = createOutputCsvFile(input, outputTimestamp);
 
         List<String> resultCsvLines = new ArrayList<>();
 
@@ -94,7 +95,7 @@ public final class GantryTestAllCyclesCapture {
         sb.append("Number of cycles = ").append(cycles).append(System.lineSeparator());
         sb.append("Point count = ").append(pointCount).append(System.lineSeparator());
         sb.append("Total point visits = ").append(totalPointVisits).append(System.lineSeparator());
-        sb.append("Total BMP files to save = ").append(totalPointVisits * 3).append(System.lineSeparator());
+        sb.append("Total offset input BMP files to save = ").append(totalPointVisits).append(System.lineSeparator());
         sb.append(String.format(Locale.US,
                 "Move speed = %.2f of machine max speed",
                 MOVE_SPEED)).append(System.lineSeparator());
@@ -221,17 +222,11 @@ public final class GantryTestAllCyclesCapture {
 
                 String baseFileName = buildBaseFileName(cycle, point);
 
-                Path originalFile = outputFolder.resolve(baseFileName + "_Original.bmp");
-                Path monoFile = outputFolder.resolve(baseFileName + "_Mono.bmp");
                 Path cropFile = outputFolder.resolve(baseFileName + "_Mono_Crop_" + point.getCropFactor() + ".bmp");
 
-                saveBmp(originalImage, originalFile);
-                saveBmp(monoImage, monoFile);
                 saveBmp(cropImage, cropFile);
 
-                sb.append("    Saved original BMP = ").append(originalFile).append(System.lineSeparator());
-                sb.append("    Saved mono BMP = ").append(monoFile).append(System.lineSeparator());
-                sb.append("    Saved mono crop BMP = ").append(cropFile).append(System.lineSeparator());
+                sb.append("    Saved offset input BMP = ").append(cropFile).append(System.lineSeparator());
 
                 Path referenceBitmapFile = GantryTestReferenceImageResolver.findReferenceBitmap(input, point);
 
@@ -278,20 +273,32 @@ public final class GantryTestAllCyclesCapture {
         return sb.toString();
     }
 
-    private static Path createOutputFolder(GantryTestCsvInput input) throws Exception {
+    private static Path createOutputFolder(GantryTestCsvInput input, String outputTimestamp) throws Exception {
         Path baseFolder;
 
         if (input.getSourceFile() != null && input.getSourceFile().getParent() != null) {
             baseFolder = input.getSourceFile().getParent().resolve("Gantry Test Captures");
         } else {
-            baseFolder = Paths.get("C:\\Opulo\\Tests\\Gantry Test\\Gantry Test Captures");
+            baseFolder = Paths.get("C:\\Opulo\\Tests\\Gantry Test Captures");
         }
 
-        Path outputFolder = baseFolder.resolve("All_Cycles_" + LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP));
+        Path outputFolder = baseFolder.resolve("All_Cycles_" + outputTimestamp);
 
         Files.createDirectories(outputFolder);
 
         return outputFolder;
+    }
+
+    private static Path createOutputCsvFile(GantryTestCsvInput input, String outputTimestamp) {
+        Path baseFolder;
+
+        if (input.getSourceFile() != null && input.getSourceFile().getParent() != null) {
+            baseFolder = input.getSourceFile().getParent();
+        } else {
+            baseFolder = Paths.get("C:\\Opulo\\Tests");
+        }
+
+        return baseFolder.resolve("Gantry Test output " + outputTimestamp + ".csv");
     }
 
     private static String buildBaseFileName(int cycle, GantryTestPoint point) {
@@ -371,5 +378,5 @@ public final class GantryTestAllCyclesCapture {
             throw new Exception("No BMP image writer is available for file: " + file);
         }
     }
-    
+
 }
