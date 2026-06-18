@@ -81,7 +81,7 @@ public final class GantryTestAllCyclesCapture {
                 + "Ref_bmp,Reference_File,Captured_Crop_File,"
                 + "d_x_pixel,d_y_pixel,d_x_mm_raw,d_y_mm_raw,"
                 + "camera_upp_x_mm_per_pixel,camera_upp_y_mm_per_pixel,"
-                + "peak,dt_ms");
+                + "peak,dt_ms,dt1_motion_ms,dt2_capture_process_ms");
 
         StringBuilder sb = new StringBuilder();
 
@@ -134,6 +134,8 @@ public final class GantryTestAllCyclesCapture {
                 Camera captureCamera;
                 Location cameraUnitsPerPixel;
                 Location finalLocation;
+                long motionStartMs;
+                long motionEndMs;
 
                 if (isTopPoint) {
                     captureCamera = topCamera;
@@ -151,7 +153,11 @@ public final class GantryTestAllCyclesCapture {
                             point.getX(),
                             point.getY())).append(System.lineSeparator());
 
+                    motionStartMs = System.currentTimeMillis();
+
                     MovableUtils.moveToLocationAtSafeZ(topCamera, targetLocation, MOVE_SPEED);
+
+                    motionEndMs = System.currentTimeMillis();
 
                     finalLocation = topCamera.getLocation();
 
@@ -183,7 +189,11 @@ public final class GantryTestAllCyclesCapture {
                             point.getY(),
                             point.getNozzleZ())).append(System.lineSeparator());
 
+                    motionStartMs = System.currentTimeMillis();
+
                     MovableUtils.moveToLocationAtSafeZ(nozzle, targetLocation, MOVE_SPEED);
+
+                    motionEndMs = System.currentTimeMillis();
 
                     finalLocation = nozzle.getLocation();
 
@@ -198,6 +208,8 @@ public final class GantryTestAllCyclesCapture {
                     sb.append("    Capturing Bottom camera image...").append(System.lineSeparator());
                 }
 
+                long captureProcessStartMs = motionEndMs;
+                long dt1MotionMs = motionEndMs - motionStartMs;
                 BufferedImage originalImage = captureCamera.lightSettleAndCapture();
                 if (originalImage == null) {
                     throw new Exception(point.getTopBottom() + " camera capture returned null image at cycle "
@@ -254,6 +266,15 @@ public final class GantryTestAllCyclesCapture {
                         offsetResult.getPeak(),
                         offsetResult.getDt())).append(System.lineSeparator());
 
+                long captureProcessEndMs = System.currentTimeMillis();
+                long dt2CaptureProcessMs = captureProcessEndMs - captureProcessStartMs;
+
+                sb.append(String.format(Locale.US,
+                        "    Timing: dt1_motion=%d ms, dt2_capture_process=%d ms, total=%d ms",
+                        dt1MotionMs,
+                        dt2CaptureProcessMs,
+                        dt1MotionMs + dt2CaptureProcessMs)).append(System.lineSeparator());
+
                 resultCsvLines.add(buildResultCsvLine(
                         cycle,
                         visitIndex,
@@ -261,7 +282,9 @@ public final class GantryTestAllCyclesCapture {
                         referenceBitmapFile,
                         cropFile,
                         offsetResult,
-                        cameraUnitsPerPixel));
+                        cameraUnitsPerPixel,
+                        dt1MotionMs,
+                        dt2CaptureProcessMs));
             }
         }
 
@@ -317,7 +340,9 @@ public final class GantryTestAllCyclesCapture {
             Path referenceBitmapFile,
             Path capturedCropFile,
             CsImageOffsetResult offsetResult,
-            Location unitsPerPixel) {
+            Location unitsPerPixel,
+            long dt1MotionMs,
+            long dt2CaptureProcessMs) {
 
         double dxMmRaw = offsetResult.getDx() * unitsPerPixel.getX();
         double dyMmRaw = offsetResult.getDy() * unitsPerPixel.getY();
@@ -343,7 +368,9 @@ public final class GantryTestAllCyclesCapture {
                 formatDouble(unitsPerPixel.getX()),
                 formatDouble(unitsPerPixel.getY()),
                 formatDouble(offsetResult.getPeak()),
-                Long.toString(offsetResult.getDt()));
+                Long.toString(offsetResult.getDt()),
+                Long.toString(dt1MotionMs),
+                Long.toString(dt2CaptureProcessMs));
     }
 
     private static String formatDouble(double value) {
