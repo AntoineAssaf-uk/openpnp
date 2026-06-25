@@ -27,7 +27,7 @@ import org.openpnp.spi.Nozzle;
 
 public final class GantryTestAllCyclesCapture {
     private static final double MOVE_SPEED = 1.00;
-    private static final int MAX_POINT_VISITS = 1000;
+    private static final int MAX_POINT_VISITS = 10000;
     private static final DateTimeFormatter OUTPUT_FOLDER_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss",
             Locale.US);
 

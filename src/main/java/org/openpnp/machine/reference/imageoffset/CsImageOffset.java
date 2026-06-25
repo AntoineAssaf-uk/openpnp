@@ -1,7 +1,11 @@
 package org.openpnp.machine.reference.imageoffset;
 
 import java.awt.image.BufferedImage;
-import java.awt.image.IndexColorModel;
+import java.awt.image.ComponentSampleModel;
+import java.awt.image.DataBuffer;
+import java.awt.image.DataBufferByte;
+import java.awt.image.Raster;
+import java.awt.image.SampleModel;
 import java.util.Locale;
 
 public final class CsImageOffset {
@@ -54,8 +58,7 @@ public final class CsImageOffset {
 
                 if (mag == 0.0) {
                     cross_pwr_spectrum[y][x] = new ComplexStruct(0.0, 0.0);
-                }
-                else {
+                } else {
                     cross_pwr_spectrum[y][x] = new ComplexStruct(num.re / mag, num.im / mag);
                 }
             }
@@ -108,98 +111,78 @@ public final class CsImageOffset {
         return new CsImageOffsetResult(-refinedDx, +refinedDy, peakVal, dt, imageOffsetInfo.toString());
     }
 
+    // Read 8-bit grayscale/indexed bitmap into double[][] with values 0.0 or 1.0.
+    //
+    // Section 4.20 assumption:
+    // - The input image has already been converted to grayscale by previous
+    // processing.
+    // - The image is stored as one byte per pixel, equivalent in intent to C#
+    // PixelFormat.Format8bppIndexed.
+    // - The grayscale palette/index is assumed to be 0..255, so the byte value
+    // itself
+    // is used directly.
+    // - Threshold is fixed at 128.
+    // - Output array is [y][x].
     private static double[][] readAndConvertBitmapToArray(BufferedImage bmp, StringBuilder imageOffsetInfo) {
-        int w = bmp.getWidth();
-        int h = bmp.getHeight();
+        if (bmp == null) {
+            throw new IllegalArgumentException("Bitmap cannot be null.");
+        }
+
+        final int w = bmp.getWidth();
+        final int h = bmp.getHeight();
 
         double[][] outArr = new double[h][w];
-        byte[] greyscale_value = new byte[w * h];
-        long[] greyscale_distribution = new long[256];
 
-        IndexColorModel indexColorModel = null;
-        if (bmp.getColorModel() instanceof IndexColorModel) {
-            indexColorModel = (IndexColorModel) bmp.getColorModel();
+        Raster raster = bmp.getRaster();
+        SampleModel sampleModel = raster.getSampleModel();
+
+        if (raster.getNumBands() != 1) {
+            throw new IllegalArgumentException(
+                    "Expected one-band 8-bit grayscale/indexed bitmap. Bands = " + raster.getNumBands());
         }
 
-        long sum = 0;
-        int idx = 0;
+        if (raster.getDataBuffer().getDataType() != DataBuffer.TYPE_BYTE) {
+            throw new IllegalArgumentException(
+                    "Expected 8-bit byte bitmap data. DataBuffer type = "
+                            + raster.getDataBuffer().getDataType());
+        }
+
+        if (!(sampleModel instanceof ComponentSampleModel)) {
+            throw new IllegalArgumentException(
+                    "Expected ComponentSampleModel for 8-bit grayscale/indexed bitmap.");
+        }
+
+        ComponentSampleModel csm = (ComponentSampleModel) sampleModel;
+        DataBufferByte dataBuffer = (DataBufferByte) raster.getDataBuffer();
+
+        byte[] pixels = dataBuffer.getData();
+
+        final int pixelStride = csm.getPixelStride();
+        final int scanlineStride = csm.getScanlineStride();
+        final int bandOffset = csm.getBandOffsets()[0];
+
+        final int x0 = raster.getMinX() - raster.getSampleModelTranslateX();
+        final int y0 = raster.getMinY() - raster.getSampleModelTranslateY();
+
+        final int baseOffset = dataBuffer.getOffset() + csm.getOffset(x0, y0, 0) + bandOffset;
 
         for (int y = 0; y < h; y++) {
+            int row = baseOffset + y * scanlineStride;
+
             for (int x = 0; x < w; x++) {
-                int g = readGrayValue(bmp, indexColorModel, x, y);
-                greyscale_value[idx++] = (byte) g;
-                greyscale_distribution[g]++;
-                sum += g;
+                int index = row + x * pixelStride;
+                int g = pixels[index] & 0xFF;
+
+                outArr[y][x] = g >= 128 ? 1.0 : 0.0;
             }
         }
 
-        sum /= 2;
-
-        int threshold = 0;
-        long sum1 = 0;
-
-        for (threshold = 0; threshold < 256; threshold++) {
-            sum1 += ((long) threshold) * greyscale_distribution[threshold];
-
-            if (sum1 >= sum) {
-                break;
-            }
+        if (imageOffsetInfo != null) {
+            imageOffsetInfo.append("Read 8-bit grayscale/indexed bitmap directly\r\n");
+            imageOffsetInfo.append("Threshold = 128\r\n");
         }
-
-        if (threshold > 255) {
-            threshold = 255;
-        }
-
-        idx = 0;
-
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int g = greyscale_value[idx++] & 0xff;
-                outArr[y][x] = g >= threshold ? 1.0 : 0.0;
-            }
-        }
-
-        imageOffsetInfo.append("Threshold = ").append(threshold).append("\r\n");
 
         return outArr;
-    }
-
-    private static int readGrayValue(BufferedImage bmp, IndexColorModel indexColorModel, int x, int y) {
-        if (indexColorModel != null) {
-            int index = bmp.getRaster().getSample(x, y, 0);
-            int r = indexColorModel.getRed(index);
-            int g = indexColorModel.getGreen(index);
-            int b = indexColorModel.getBlue(index);
-            return luminance(r, g, b);
-        }
-
-        if (bmp.getRaster().getNumBands() == 1) {
-            return clampToByte(bmp.getRaster().getSample(x, y, 0));
-        }
-
-        int rgb = bmp.getRGB(x, y);
-
-        int r = (rgb >> 16) & 0xff;
-        int g = (rgb >> 8) & 0xff;
-        int b = rgb & 0xff;
-
-        return luminance(r, g, b);
-    }
-
-    private static int luminance(int r, int g, int b) {
-        return clampToByte((299 * r + 587 * g + 114 * b + 500) / 1000);
-    }
-
-    private static int clampToByte(int value) {
-        if (value < 0) {
-            return 0;
-        }
-
-        if (value > 255) {
-            return 255;
-        }
-
-        return value;
     }
 
     private static void applyHannWindow(double[][] arr) {
