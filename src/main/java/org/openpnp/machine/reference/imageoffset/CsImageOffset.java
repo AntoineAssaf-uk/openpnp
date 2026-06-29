@@ -51,12 +51,19 @@ public final class CsImageOffset {
 
         ComplexStruct[][] cross_pwr_spectrum = new ComplexStruct[h][w];
 
+        // Cross-power spectrum:
+        // R = FFT(reference) * conj(FFT(captured))
+        // R = R / |R|
+        //
+        // If |R| is extremely small, the phase is mostly noise. Do not normalize
+        // near-zero bins, because that gives noise the same weight as real image data.
+
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 ComplexStruct num = ref_complex_array[y][x].multiply(cap_complex_array[y][x].conj());
                 double mag = num.abs();
 
-                if (mag == 0.0) {
+                if (mag < 1e-12) {
                     cross_pwr_spectrum[y][x] = new ComplexStruct(0.0, 0.0);
                 } else {
                     cross_pwr_spectrum[y][x] = new ComplexStruct(num.re / mag, num.im / mag);
@@ -108,20 +115,29 @@ public final class CsImageOffset {
         long dt = System.currentTimeMillis() - start;
         imageOffsetInfo.append("dt= ").append(dt).append("\r\n");
 
+        double variance = varianceCloseToPeak(cross_pwr_spectrum, peakX, peakY, 10);
+
+        if (variance > 1e-12) {
+            peakVal = Math.sqrt((peakVal * peakVal) / variance);
+        } else {
+            peakVal = 1e12;
+        }
+
         return new CsImageOffsetResult(-refinedDx, +refinedDy, peakVal, dt, imageOffsetInfo.toString());
     }
 
-    // Read 8-bit grayscale/indexed bitmap into double[][] with values 0.0 or 1.0.
+    // Read already-grayscale 8-bit bitmap into double[][] with raw values 0..255.
     //
-    // Section 4.20 assumption:
-    // - The input image has already been converted to grayscale by previous
+    // Section 4.20 note:
+    // - The input bitmap has already been converted to grayscale by previous
     // processing.
-    // - The image is stored as one byte per pixel, equivalent in intent to C#
-    // PixelFormat.Format8bppIndexed.
-    // - The grayscale palette/index is assumed to be 0..255, so the byte value
-    // itself
-    // is used directly.
-    // - Threshold is fixed at 128.
+    // - Do not threshold here. Earlier fixed threshold 128 testing helped some
+    // cases,
+    // but it also removes useful grey-level information and can introduce binary
+    // edge noise.
+    // - The pixel format is expected to be one byte per pixel, equivalent in
+    // purpose
+    // to C# PixelFormat.Format8bppIndexed.
     // - Output array is [y][x].
     private static double[][] readAndConvertBitmapToArray(BufferedImage bmp, StringBuilder imageOffsetInfo) {
         if (bmp == null) {
@@ -171,15 +187,15 @@ public final class CsImageOffset {
 
             for (int x = 0; x < w; x++) {
                 int index = row + x * pixelStride;
-                int g = pixels[index] & 0xFF;
 
-                outArr[y][x] = g >= 128 ? 1.0 : 0.0;
+                // Raw grayscale value 0..255. No threshold.
+                outArr[y][x] = pixels[index] & 0xFF;
             }
         }
 
         if (imageOffsetInfo != null) {
             imageOffsetInfo.append("Read 8-bit grayscale/indexed bitmap directly\r\n");
-            imageOffsetInfo.append("Threshold = 128\r\n");
+            imageOffsetInfo.append("No threshold applied; raw grayscale values 0..255 used\r\n");
         }
 
         return outArr;
@@ -326,6 +342,44 @@ public final class CsImageOffset {
         }
 
         return new double[] { px + dx, py + dy };
+    }
+
+    // Returns the local variance around the correlation peak.
+    // The window wraps around the image edges because the FFT correlation surface
+    // is circular.
+    private static double varianceCloseToPeak(ComplexStruct[][] corr, int px, int py, int indexMax) {
+        int h = corr.length;
+        int w = corr[0].length;
+
+        double average = 0.0;
+        double variance = 0.0;
+        double den = (double) ((2 * indexMax + 1) * (2 * indexMax + 1));
+
+        for (int j = -indexMax; j <= indexMax; j++) {
+            int y = (j + py + h) % h;
+
+            for (int i = -indexMax; i <= indexMax; i++) {
+                int x = (i + px + w) % w;
+                average += corr[y][x].re;
+            }
+        }
+
+        average /= den;
+
+        for (int j = -indexMax; j <= indexMax; j++) {
+            int y = (j + py + h) % h;
+
+            for (int i = -indexMax; i <= indexMax; i++) {
+                int x = (i + px + w) % w;
+                double d = corr[y][x].re - average;
+
+                // Important: +=, not =
+                variance += d * d;
+            }
+        }
+
+        variance /= den;
+        return variance;
     }
 
     private static final class ComplexStruct {
