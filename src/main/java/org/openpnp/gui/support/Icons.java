@@ -12,7 +12,7 @@ public class Icons {
     public static Icon paste = getIcon("/icons/paste.svg");
     public static Icon export = getIcon("/icons/export.svg");
     public static Icon importt = getIcon("/icons/import.svg");
-    
+
     public static Icon nozzleAdd = getIcon("/icons/nozzle-add.svg");
     public static Icon nozzleRemove = getIcon("/icons/nozzle-remove.svg");
 
@@ -37,7 +37,7 @@ public class Icons {
 
     public static Icon colorFalse = getIcon("/icons/color-false.svg");
     public static Icon colorTrue = getIcon("/icons/color-true.svg");
-    
+
     public static Icon start = getIcon("/icons/control-start.svg");
     public static Icon pause = getIcon("/icons/control-pause.svg");
     public static Icon step = getIcon("/icons/control-next.svg");
@@ -48,7 +48,9 @@ public class Icons {
 
     public static Icon twoPointLocate = getIcon("/icons/board-two-placement-locate.svg");
     public static Icon fiducialCheck = getIcon("/icons/board-fiducial-locate.svg");
+    public static Icon automaticBoardHeight = getIcon("/icons/automatic-board-height.png");
     public static Icon autoPanelize = getIcon("/icons/panelize.svg");
+
     public static Icon autoPanelizeXOut = getIcon("/icons/panelize_xout.svg");
     public static Icon autoPanelizeFidCheck = getIcon("/icons/panelize_fiducialcheck.svg");
     public static Icon useChildFiducial = getIcon("/icons/panelize_use_board_fiducial.svg");
@@ -62,7 +64,6 @@ public class Icons {
     public static Icon showPart = getIcon("/icons/feeder-show-part-outline.svg");
     public static Icon editFeeder = getIcon("/icons/feeder-edit.svg");
     public static Icon feeder = getIcon("/icons/feeder.svg");
-    
 
     public static Icon partAlign = getIcon("/icons/part-align.svg");
 
@@ -76,7 +77,7 @@ public class Icons {
     public static Icon rotateClockwise = getIcon("/icons/rotate-clockwise.svg");
     public static Icon rotateCounterclockwise = getIcon("/icons/rotate-counterclockwise.svg");
     public static Icon zero = getIcon("/icons/zero.svg");
-    
+
     public static Icon navigateFirst = getIcon("/icons/nav-first.svg");
     public static Icon navigateLast = getIcon("/icons/nav-last.svg");
     public static Icon navigatePrevious = getIcon("/icons/nav-previous.svg");
@@ -132,8 +133,7 @@ public class Icons {
     public static Icon getIcon(String resourceName, int width, int height) {
         if (resourceName.endsWith(".svg")) {
             return new FlatSVGIcon(resourceName.substring(1), width, height);
-        }
-        else {
+        } else {
             return new ImageIcon(Icons.class.getResource(resourceName));
         }
     }
