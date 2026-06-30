@@ -94,6 +94,7 @@ import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderLocationsTableModel;
 import org.openpnp.gui.viewers.PlacementsHolderLocationViewerDialog;
+import org.openpnp.machine.reference.ReferenceNozzle;
 import org.openpnp.model.Board;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Configuration.TablesLinked;
@@ -1558,50 +1559,110 @@ public class JobPanel extends JPanel {
             });
         }
     };
-    public final Action automaticBoardHeightAction = new AbstractAction() {
-        {
-            putValue(SMALL_ICON, Icons.automaticBoardHeight);
-            putValue(NAME, "Automatic Board Height Detection");
-            putValue(SHORT_DESCRIPTION, "Automatic Board Height Detection");
+
+    private void setAutomaticBoardHeightVacuum(Nozzle nozzle, boolean on) throws Exception {
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+
+        if (on) {
+            nozzle.getHead().actuatePumpRequest(nozzle, true);
         }
 
-        @Override
-        public void actionPerformed(ActionEvent arg0) {
-            PlacementsHolderLocation placementsHolderLocation = getSelection();
+        referenceNozzle.getExpectedVacuumActuator().actuate(on);
 
-            if (placementsHolderLocation == null) {
-                MessageBoxes.infoBox(
-                        "Automatic Board Height Detection",
-                        "Please select a board location first.");
-                return;
-            }
+        if (!on) {
+            nozzle.getHead().actuatePumpRequest(nozzle, false);
+        }
+    }
 
-            if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
-                MessageBoxes.infoBox(
-                        "Automatic Board Height Detection",
-                        "Please perform board fiducial check first.");
-                return;
-            }
+    private double readAutomaticBoardHeightVacuum(Nozzle nozzle) throws Exception {
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+        return referenceNozzle.readVacuumLevel();
+    }
 
-            HeadMountable selectedTool = MainFrame.get().getMachineControls().getSelectedTool();
+    private void cleanupAutomaticBoardHeightNozzle(Nozzle nozzle) {
+        try {
+            nozzle.getHead().moveToSafeZ();
+        } catch (Exception e) {
+            Logger.warn(e, "Automatic Board Height Detection: failed to park nozzle Z.");
+        }
 
-            if (selectedTool == null) {
-                MessageBoxes.infoBox(
-                        "Automatic Board Height Detection",
-                        "Please select a nozzle in Machine Controls.");
-                return;
-            }
+        try {
+            setAutomaticBoardHeightVacuum(nozzle, false);
+        } catch (Exception e) {
+            Logger.warn(e, "Automatic Board Height Detection: failed to turn vacuum off.");
+        }
+    }
 
-            if (!(selectedTool instanceof Nozzle)) {
-                MessageBoxes.infoBox(
-                        "Automatic Board Height Detection",
-                        "Please select a nozzle in Machine Controls.");
-                return;
-            }
+public final Action automaticBoardHeightAction = new AbstractAction() {
+    {
+        putValue(SMALL_ICON, Icons.automaticBoardHeight);
+        putValue(NAME, "Automatic Board Height Detection");
+        putValue(SHORT_DESCRIPTION, "Automatic Board Height Detection");
+    }
 
-            Nozzle nozzle = (Nozzle) selectedTool;
+    @Override
+    public void actionPerformed(ActionEvent arg0) {
+        PlacementsHolderLocation placementsHolderLocation = getSelection();
 
-            UiUtils.submitUiMachineTask(() -> {
+        if (placementsHolderLocation == null) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "Please select a board location first.");
+            return;
+        }
+
+        if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "Please perform board fiducial check first.");
+            return;
+        }
+
+        HeadMountable selectedTool = MainFrame.get().getMachineControls().getSelectedTool();
+
+        if (selectedTool == null) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "Please select a nozzle in Machine Controls.");
+            return;
+        }
+
+        if (!(selectedTool instanceof Nozzle)) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "Please select a nozzle in Machine Controls.");
+            return;
+        }
+
+        Nozzle nozzle = (Nozzle) selectedTool;
+
+        if (!(nozzle instanceof ReferenceNozzle)) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "Automatic Board Height Detection currently requires a ReferenceNozzle.");
+            return;
+        }
+
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+
+        if (referenceNozzle.getVacuumActuator() == null) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "The selected nozzle has no vacuum actuator configured.");
+            return;
+        }
+
+        if (referenceNozzle.getVacuumSenseActuator() == null) {
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    "The selected nozzle has no vacuum sense actuator configured.");
+            return;
+        }
+
+        UiUtils.submitUiMachineTask(() -> {
+            double vacuumReading;
+
+            try {
                 Camera camera = nozzle.getHead().getDefaultCamera();
 
                 Location cameraLocation = camera.getLocation();
@@ -1621,20 +1682,30 @@ public class JobPanel extends JPanel {
                 MovableUtils.moveToLocationAtSafeZ(nozzle, nozzleTargetLocation);
                 MovableUtils.fireTargetedUserAction(nozzle);
 
-                MessageBoxes.infoBox(
-                        "Automatic Board Height Detection",
-                        String.format(
-                                "Selected nozzle %s moved to current Top-camera XY at Safe Z.%n%n"
-                                        + "X = %.3f mm%n"
-                                        + "Y = %.3f mm%n"
-                                        + "Z = %.3f mm",
-                                nozzle.getName(),
-                                nozzleTargetLocation.getX(),
-                                nozzleTargetLocation.getY(),
-                                nozzleTargetLocation.getZ()));
-            });
-        }
-    };
+                setAutomaticBoardHeightVacuum(nozzle, true);
+
+                Thread.sleep(250);
+
+                vacuumReading = readAutomaticBoardHeightVacuum(nozzle);
+            }
+            finally {
+                cleanupAutomaticBoardHeightNozzle(nozzle);
+            }
+
+            MessageBoxes.infoBox(
+                    "Automatic Board Height Detection",
+                    String.format(
+                            "Selected nozzle %s moved to the current Top-camera XY at Safe Z.%n%n"
+                                    + "Vacuum was turned ON and read successfully.%n"
+                                    + "Vacuum reading = %.3f%n%n"
+                                    + "Nozzle Z was parked and vacuum was turned OFF.",
+                            nozzle.getName(),
+                            vacuumReading));
+        });
+    }
+};
+
+
 
     public final Action viewerAction = new AbstractAction() {
         {
