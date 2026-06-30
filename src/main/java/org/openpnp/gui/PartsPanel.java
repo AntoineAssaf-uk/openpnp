@@ -95,7 +95,6 @@ import org.simpleframework.xml.Serializer;
 @SuppressWarnings("serial")
 public class PartsPanel extends JPanel implements WizardContainer {
 
-
     private static final String PREF_DIVIDER_POSITION = "PartsPanel.dividerPosition";
     private static final int PREF_DIVIDER_POSITION_DEF = -1;
     private Preferences prefs = Preferences.userNodeForPackage(PartsPanel.class);
@@ -184,8 +183,12 @@ public class PartsPanel extends JPanel implements WizardContainer {
             @Override
             public String getToolTipText(MouseEvent evt) {
                 int column = convertColumnIndexToModel(columnAtPoint(evt.getPoint()));
-                if(column==2) { return Translations.getString("PartsTableModel.Column.Height.toolTip"); } //$NON-NLS-1$
-                if(column==3) { return Translations.getString("PartsTableModel.Column.ThroughBoardDepth.toolTip"); } //$NON-NLS-1$
+                if (column == 2) {
+                    return Translations.getString("PartsTableModel.Column.Height.toolTip"); //$NON-NLS-1$
+                }
+                if (column == 3) {
+                    return Translations.getString("PartsTableModel.Column.ThroughBoardDepth.toolTip"); //$NON-NLS-1$
+                }
                 return null;
             }
         };
@@ -216,17 +219,17 @@ public class PartsPanel extends JPanel implements WizardContainer {
         table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
         splitPane.setLeftComponent(new JScrollPane(table));
         splitPane.setRightComponent(tabbedPane);
-        
+
         toolBar.add(newPartAction);
         toolBar.add(deletePartAction);
         toolBar.addSeparator();
         toolBar.add(pickPartAction);
-        
+
         toolBar.addSeparator();
         JButton btnNewButton = new JButton(copyPartToClipboardAction);
         btnNewButton.setHideActionText(true);
         toolBar.add(btnNewButton);
-        
+
         JButton btnNewButton_1 = new JButton(pastePartToClipboardAction);
         btnNewButton_1.setHideActionText(true);
         toolBar.add(btnNewButton_1);
@@ -244,17 +247,18 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 }
             }
         });
-        
+
         Configuration.get().addPropertyChangeListener("visionSettings", new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {
-                // Handle vision settings changes like selection changes, as the inherited settings might change. 
+                // Handle vision settings changes like selection changes, as the inherited
+                // settings might change.
                 updateWizards();
             }
         });
 
         tableModel.addTableModelListener(e -> {
-            if (selectedPart != null && getSelectedPart() != selectedPart) { 
+            if (selectedPart != null && getSelectedPart() != selectedPart) {
                 // Reselect previously selected settings.
                 Helpers.selectObjectTableRow(table, selectedPart);
             }
@@ -271,10 +275,22 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
     private List<Part> getSelections() {
         List<Part> selections = new ArrayList<>();
-        for (int selectedRow : table.getSelectedRows()) {
-            selectedRow = table.convertRowIndexToModel(selectedRow);
-            selections.add(tableModel.getRowObjectAt(selectedRow));
+        int modelRowCount = tableModel.getRowCount();
+
+        for (int selectedViewRow : table.getSelectedRows()) {
+            if (selectedViewRow < 0 || selectedViewRow >= table.getRowCount()) {
+                continue;
+            }
+
+            int selectedModelRow = table.convertRowIndexToModel(selectedViewRow);
+
+            if (selectedModelRow < 0 || selectedModelRow >= modelRowCount) {
+                continue;
+            }
+
+            selections.add(tableModel.getRowObjectAt(selectedModelRow));
         }
+
         return selections;
     }
 
@@ -283,8 +299,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
         // If current expression doesn't parse, don't update.
         try {
             rf = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim());
-        }
-        catch (PatternSyntaxException e) {
+        } catch (PatternSyntaxException e) {
             Logger.warn(e, "Search failed");
             return;
         }
@@ -343,19 +358,31 @@ public class PartsPanel extends JPanel implements WizardContainer {
             String formattedIds;
             if (ids.size() <= 3) {
                 formattedIds = String.join(", ", ids);
-            }
-            else {
+            } else {
                 formattedIds = String.join(", ", ids.subList(0, 3)) + ", and " + (ids.size() - 3) + " others";
             }
-            
+
             int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
                     Translations.getString("DialogMessages.ConfirmDelete.text") + " " + formattedIds + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + selections.size() + " " + Translations.getString( //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                                    "CommonWords.parts") + "?", JOptionPane.YES_NO_OPTION); //$NON-NLS-1$ //$NON-NLS-2$
+                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + selections.size() + " " //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                            + Translations.getString(
+                                    "CommonWords.parts")
+                            + "?", //$NON-NLS-1$
+                    JOptionPane.YES_NO_OPTION);
             if (ret == JOptionPane.YES_OPTION) {
+                if (table.isEditing()) {
+                    table.getCellEditor().stopCellEditing();
+                }
+
+                selectedPart = null;
+                priorRowIndex = -1;
+                table.clearSelection();
+
                 for (Part part : selections) {
                     Configuration.get().removePart(part);
                 }
+
+                updateWizards();
             }
         }
     };
@@ -381,7 +408,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 if (feeder == null) {
                     throw new Exception("No valid feeder found for " + part.getId());
                 }
-                // Perform the whole Job like pick cycle as in the FeedersPanel. 
+                // Perform the whole Job like pick cycle as in the FeedersPanel.
                 FeedersPanel.pickFeeder(feeder);
             });
         }
@@ -407,8 +434,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 StringSelection stringSelection = new StringSelection(w.toString());
                 Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
                 clipboard.setContents(stringSelection, null);
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 MessageBoxes.errorBox(getTopLevelAncestor(), "Copy Failed", e);
             }
         }
@@ -448,8 +474,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 Configuration.get().addPart(part);
                 tableModel.fireTableDataChanged();
                 Helpers.selectLastTableRow(table);
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 MessageBoxes.errorBox(getTopLevelAncestor(), "Paste Failed", e);
             }
         }
@@ -463,18 +488,17 @@ public class PartsPanel extends JPanel implements WizardContainer {
         if (selections.size() > 1) {
             singleSelectionActionGroup.setEnabled(false);
             multiSelectionActionGroup.setEnabled(true);
-        }
-        else {
+        } else {
             multiSelectionActionGroup.setEnabled(false);
             singleSelectionActionGroup.setEnabled(!selections.isEmpty());
         }
 
         Part selectedPart = getSelectedPart();
-        
+
         if (tabbedPane.getTabCount() > 0) {
             selectedTab = tabbedPane.getSelectedIndex();
         }
-        
+
         for (Component comp : tabbedPane.getComponents()) {
             if (comp instanceof AbstractConfigurationWizard) {
                 ((AbstractConfigurationWizard) comp).dispose();
@@ -497,22 +521,21 @@ public class PartsPanel extends JPanel implements WizardContainer {
                     tabbedPane.addTab(wizard.getWizardName(), (JPanel) wizard);
                 }
             }
-            
-            FiducialLocator fiducialLocator =
-                    Configuration.get().getMachine().getFiducialLocator();
+
+            FiducialLocator fiducialLocator = Configuration.get().getMachine().getFiducialLocator();
             wizard = fiducialLocator.getPartConfigurationWizard(selectedPart);
             if (wizard != null) {
                 wizard.setWizardContainer(PartsPanel.this);
                 tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
             }
             MainFrame mainFrame = MainFrame.get();
-            if (mainFrame.getTabs().getSelectedComponent() == mainFrame.getPartsTab() 
+            if (mainFrame.getTabs().getSelectedComponent() == mainFrame.getPartsTab()
                     && Configuration.get().getTablesLinked() == TablesLinked.Linked) {
                 mainFrame.getPackagesTab().selectPackageInTable(selectedPart.getPackage());
                 mainFrame.getFeedersTab().selectFeederForPart(selectedPart);
                 mainFrame.getVisionSettingsTab().selectVisionSettingsInTable(selectedPart);
             }
-            
+
             if (selectedTab >= 0 && selectedTab < tabbedPane.getTabCount()) {
                 tabbedPane.setSelectedIndex(selectedTab);
             }
@@ -524,8 +547,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
     public void selectPartInTableAndUpdateLinks(Part part) {
         selectPartInTable(part);
 
-        if(Configuration.get().getTablesLinked() == TablesLinked.Linked)
-        {
+        if (Configuration.get().getTablesLinked() == TablesLinked.Linked) {
             MainFrame mainFrame = MainFrame.get();
             mainFrame.getPartsTab().selectPartInTable(part);
             if (part != null) {
@@ -543,8 +565,10 @@ public class PartsPanel extends JPanel implements WizardContainer {
     }
 
     @Override
-    public void wizardCompleted(Wizard wizard) {}
+    public void wizardCompleted(Wizard wizard) {
+    }
 
     @Override
-    public void wizardCancelled(Wizard wizard) {}
+    public void wizardCancelled(Wizard wizard) {
+    }
 }
