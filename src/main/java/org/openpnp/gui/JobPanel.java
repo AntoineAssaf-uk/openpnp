@@ -170,6 +170,8 @@ public class JobPanel extends JPanel {
 
     private State state = State.Stopped;
 
+    private final Map<PlacementsHolderLocation, Boolean> boardLocationFiducialsConfirmed = new HashMap<>();
+
     public JobPanel(Configuration configuration, MainFrame frame) {
         this.configuration = configuration;
         this.mainFrame = frame;
@@ -565,6 +567,8 @@ public class JobPanel extends JPanel {
     }
 
     public void setJob(Job job) {
+        boardLocationFiducialsConfirmed.clear();
+
         if (this.job != null) {
             this.job.removePropertyChangeListener("dirty", titlePropertyChangeListener); //$NON-NLS-1$
             this.job.removePropertyChangeListener("file", titlePropertyChangeListener); //$NON-NLS-1$
@@ -1540,6 +1544,7 @@ public class JobPanel extends JPanel {
                     placementsHolderLocation.setLocalToGlobalTransform(tx);
                 }
                 refreshSelectedRow();
+                boardLocationFiducialsConfirmed.put(placementsHolderLocation, Boolean.TRUE);
 
                 /**
                  * Move the camera to the calculated position.
@@ -1562,9 +1567,26 @@ public class JobPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
+            PlacementsHolderLocation placementsHolderLocation = getSelection();
+
+            if (placementsHolderLocation == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a board location first.");
+                return;
+            }
+
+            if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please perform board fiducial check first.");
+                return;
+            }
+
             MessageBoxes.infoBox(
                     "Automatic Board Height Detection",
-                    "Automatic Board Height Detection will be implemented in Section 6.3.2.");
+                    "Board fiducial check prerequisite is satisfied. "
+                            + "Automatic probing will be implemented in Section 6.3.3.");
         }
     };
     public final Action viewerAction = new AbstractAction() {
