@@ -95,6 +95,9 @@ import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderLocationsTableModel;
 import org.openpnp.gui.viewers.PlacementsHolderLocationViewerDialog;
 import org.openpnp.machine.reference.ReferenceNozzle;
+import org.openpnp.machine.reference.ReferenceNozzleTip;
+import org.openpnp.model.LengthUnit;
+import org.openpnp.spi.MotionPlanner.CompletionType;
 import org.openpnp.model.Board;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Configuration.TablesLinked;
@@ -169,7 +172,11 @@ public class JobPanel extends JPanel {
 
     private JobProcessor jobProcessor;
 
-    private State state = State.Stopped;
+    private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 1.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 3.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED = 0.10;
+    private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 250;
+    private static final int AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS = 100;
 
     private final Map<PlacementsHolderLocation, Boolean> boardLocationFiducialsConfirmed = new HashMap<>();
 
@@ -1593,119 +1600,267 @@ public class JobPanel extends JPanel {
         }
     }
 
-public final Action automaticBoardHeightAction = new AbstractAction() {
-    {
-        putValue(SMALL_ICON, Icons.automaticBoardHeight);
-        putValue(NAME, "Automatic Board Height Detection");
-        putValue(SHORT_DESCRIPTION, "Automatic Board Height Detection");
+    private static class AutomaticBoardHeightCoarseProbeResult {
+        private final double startZ;
+        private final double contactZ;
+        private final double minZ;
+        private final double threshold;
+        private final double contactReading;
+        private final int steps;
+
+        private AutomaticBoardHeightCoarseProbeResult(
+                double startZ,
+                double contactZ,
+                double minZ,
+                double threshold,
+                double contactReading,
+                int steps) {
+            this.startZ = startZ;
+            this.contactZ = contactZ;
+            this.minZ = minZ;
+            this.threshold = threshold;
+            this.contactReading = contactReading;
+            this.steps = steps;
+        }
     }
 
-    @Override
-    public void actionPerformed(ActionEvent arg0) {
-        PlacementsHolderLocation placementsHolderLocation = getSelection();
-
-        if (placementsHolderLocation == null) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Please select a board location first.");
-            return;
+    private double getAutomaticBoardHeightVacuumThreshold(Nozzle nozzle) throws Exception {
+        if (!(nozzle.getNozzleTip() instanceof ReferenceNozzleTip)) {
+            throw new Exception("The selected nozzle tip is not a ReferenceNozzleTip.");
         }
 
-        if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Please perform board fiducial check first.");
-            return;
+        ReferenceNozzleTip nozzleTip = (ReferenceNozzleTip) nozzle.getNozzleTip();
+
+        double low = nozzleTip.getVacuumLevelPartOnLow();
+        double high = nozzleTip.getVacuumLevelPartOnHigh();
+
+        if (low == high) {
+            throw new Exception("The selected nozzle tip has invalid vacuum thresholds.");
         }
 
-        HeadMountable selectedTool = MainFrame.get().getMachineControls().getSelectedTool();
+        double min = Math.min(low, high);
+        double max = Math.max(low, high);
 
-        if (selectedTool == null) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Please select a nozzle in Machine Controls.");
-            return;
+        return min + 0.5 * (max - min);
+    }
+
+    private AutomaticBoardHeightCoarseProbeResult probeAutomaticBoardHeightCoarse(
+            Nozzle nozzle,
+            Location startLocation,
+            double threshold) throws Exception {
+
+        double stepZ = new Length(
+                AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double minZ = new Length(
+                AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double startZ = startLocation.getZ();
+        double z = startZ;
+        int steps = 0;
+
+        while (true) {
+            if (z < minZ) {
+                throw new Exception(String.format(
+                        "Board contact was not detected before the hard safety limit.%n%n"
+                                + "Last attempted Z = %.3f mm%n"
+                                + "Minimum allowed Z = %.3f mm",
+                        z,
+                        minZ));
+            }
+
+            Location probeLocation = startLocation.derive(
+                    null,
+                    null,
+                    z,
+                    null);
+
+            nozzle.moveTo(probeLocation, AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED);
+            nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+            Thread.sleep(AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS);
+
+            double reading = readAutomaticBoardHeightVacuum(nozzle);
+
+            Logger.info(String.format(
+                    "Automatic Board Height Detection coarse probe: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
+                    steps,
+                    z,
+                    reading,
+                    threshold));
+
+            if (reading <= threshold) {
+                return new AutomaticBoardHeightCoarseProbeResult(
+                        startZ,
+                        z,
+                        minZ,
+                        threshold,
+                        reading,
+                        steps);
+            }
+
+            z -= stepZ;
+            steps++;
+        }
+    }
+
+    public final Action automaticBoardHeightAction = new AbstractAction() {
+        {
+            putValue(SMALL_ICON, Icons.automaticBoardHeight);
+            putValue(NAME, "Automatic Board Height Detection");
+            putValue(SHORT_DESCRIPTION, "Automatic Board Height Detection");
         }
 
-        if (!(selectedTool instanceof Nozzle)) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Please select a nozzle in Machine Controls.");
-            return;
-        }
+        @Override
+        public void actionPerformed(ActionEvent arg0) {
+            PlacementsHolderLocation placementsHolderLocation = getSelection();
 
-        Nozzle nozzle = (Nozzle) selectedTool;
+            if (placementsHolderLocation == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a board location first.");
+                return;
+            }
 
-        if (!(nozzle instanceof ReferenceNozzle)) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Automatic Board Height Detection currently requires a ReferenceNozzle.");
-            return;
-        }
+            if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please perform board fiducial check first.");
+                return;
+            }
 
-        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+            HeadMountable selectedTool = MainFrame.get().getMachineControls().getSelectedTool();
 
-        if (referenceNozzle.getVacuumActuator() == null) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "The selected nozzle has no vacuum actuator configured.");
-            return;
-        }
+            if (selectedTool == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a nozzle in Machine Controls.");
+                return;
+            }
 
-        if (referenceNozzle.getVacuumSenseActuator() == null) {
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "The selected nozzle has no vacuum sense actuator configured.");
-            return;
-        }
+            if (!(selectedTool instanceof Nozzle)) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a nozzle in Machine Controls.");
+                return;
+            }
 
-        UiUtils.submitUiMachineTask(() -> {
-            double vacuumReading;
+            Nozzle nozzle = (Nozzle) selectedTool;
 
-            try {
-                Camera camera = nozzle.getHead().getDefaultCamera();
+            if (!(nozzle instanceof ReferenceNozzle)) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Automatic Board Height Detection currently requires a ReferenceNozzle.");
+                return;
+            }
 
-                Location cameraLocation = camera.getLocation();
-                Length safeZ = nozzle.getEffectiveSafeZ();
+            ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
 
-                double targetZ = Double.NaN;
-                if (safeZ != null) {
-                    targetZ = safeZ.convertToUnits(cameraLocation.getUnits()).getValue();
+            if (referenceNozzle.getVacuumActuator() == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "The selected nozzle has no vacuum actuator configured.");
+                return;
+            }
+
+            if (referenceNozzle.getVacuumSenseActuator() == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "The selected nozzle has no vacuum sense actuator configured.");
+                return;
+            }
+
+            if (!(nozzle.getNozzleTip() instanceof ReferenceNozzleTip)) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "The selected nozzle tip is not a ReferenceNozzleTip.");
+                return;
+            }
+
+            UiUtils.submitUiMachineTask(() -> {
+                AutomaticBoardHeightCoarseProbeResult result = null;
+                String failureMessage = null;
+
+                try {
+                    Camera camera = nozzle.getHead().getDefaultCamera();
+
+                    Location cameraLocation = camera.getLocation();
+                    Length safeZ = nozzle.getEffectiveSafeZ();
+
+                    if (safeZ == null) {
+                        throw new Exception("The selected nozzle has no effective Safe Z.");
+                    }
+
+                    double targetZ = safeZ.convertToUnits(cameraLocation.getUnits()).getValue();
+
+                    Location nozzleTargetLocation = cameraLocation.derive(
+                            null,
+                            null,
+                            targetZ,
+                            null);
+
+                    MovableUtils.moveToLocationAtSafeZ(nozzle, nozzleTargetLocation);
+                    MovableUtils.fireTargetedUserAction(nozzle);
+
+                    double threshold = getAutomaticBoardHeightVacuumThreshold(nozzle);
+
+                    setAutomaticBoardHeightVacuum(nozzle, true);
+
+                    Thread.sleep(AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS);
+
+                    result = probeAutomaticBoardHeightCoarse(
+                            nozzle,
+                            nozzleTargetLocation,
+                            threshold);
+                } catch (Exception e) {
+                    Logger.warn(e, "Automatic Board Height Detection coarse probe failed.");
+                    failureMessage = e.getMessage();
+                } finally {
+                    cleanupAutomaticBoardHeightNozzle(nozzle);
                 }
 
-                Location nozzleTargetLocation = cameraLocation.derive(
-                        null,
-                        null,
-                        targetZ,
-                        null);
+                if (failureMessage != null) {
+                    MessageBoxes.infoBox(
+                            "Automatic Board Height Detection",
+                            "Automatic Board Height Detection failed during coarse probing."
+                                    + "\n\n"
+                                    + failureMessage
+                                    + "\n\n"
+                                    + "No board Z was updated."
+                                    + "\n"
+                                    + "Nozzle Z was parked and vacuum was turned OFF.");
+                    return;
+                }
 
-                MovableUtils.moveToLocationAtSafeZ(nozzle, nozzleTargetLocation);
-                MovableUtils.fireTargetedUserAction(nozzle);
-
-                setAutomaticBoardHeightVacuum(nozzle, true);
-
-                Thread.sleep(250);
-
-                vacuumReading = readAutomaticBoardHeightVacuum(nozzle);
-            }
-            finally {
-                cleanupAutomaticBoardHeightNozzle(nozzle);
-            }
-
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    String.format(
-                            "Selected nozzle %s moved to the current Top-camera XY at Safe Z.%n%n"
-                                    + "Vacuum was turned ON and read successfully.%n"
-                                    + "Vacuum reading = %.3f%n%n"
-                                    + "Nozzle Z was parked and vacuum was turned OFF.",
-                            nozzle.getName(),
-                            vacuumReading));
-        });
-    }
-};
-
-
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        String.format(
+                                "Coarse board contact detected.%n%n"
+                                        + "Nozzle: %s%n"
+                                        + "Start Z: %.3f mm%n"
+                                        + "Contact Z: %.3f mm%n"
+                                        + "Minimum allowed Z: %.3f mm%n"
+                                        + "Vacuum threshold: %.3f%n"
+                                        + "Contact vacuum reading: %.3f%n"
+                                        + "Coarse steps: %d%n%n"
+                                        + "No board Z was updated in this step.%n"
+                                        + "Nozzle Z was parked and vacuum was turned OFF.",
+                                nozzle.getName(),
+                                result.startZ,
+                                result.contactZ,
+                                result.minZ,
+                                result.threshold,
+                                result.contactReading,
+                                result.steps));
+            });
+        }
+    };
 
     public final Action viewerAction = new AbstractAction() {
         {
