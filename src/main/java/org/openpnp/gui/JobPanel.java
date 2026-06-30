@@ -1583,12 +1583,59 @@ public class JobPanel extends JPanel {
                 return;
             }
 
-            MessageBoxes.infoBox(
-                    "Automatic Board Height Detection",
-                    "Board fiducial check prerequisite is satisfied. "
-                            + "Automatic probing will be implemented in Section 6.3.3.");
+            HeadMountable selectedTool = MainFrame.get().getMachineControls().getSelectedTool();
+
+            if (selectedTool == null) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a nozzle in Machine Controls.");
+                return;
+            }
+
+            if (!(selectedTool instanceof Nozzle)) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a nozzle in Machine Controls.");
+                return;
+            }
+
+            Nozzle nozzle = (Nozzle) selectedTool;
+
+            UiUtils.submitUiMachineTask(() -> {
+                Camera camera = nozzle.getHead().getDefaultCamera();
+
+                Location cameraLocation = camera.getLocation();
+                Length safeZ = nozzle.getEffectiveSafeZ();
+
+                double targetZ = Double.NaN;
+                if (safeZ != null) {
+                    targetZ = safeZ.convertToUnits(cameraLocation.getUnits()).getValue();
+                }
+
+                Location nozzleTargetLocation = cameraLocation.derive(
+                        null,
+                        null,
+                        targetZ,
+                        null);
+
+                MovableUtils.moveToLocationAtSafeZ(nozzle, nozzleTargetLocation);
+                MovableUtils.fireTargetedUserAction(nozzle);
+
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        String.format(
+                                "Selected nozzle %s moved to current Top-camera XY at Safe Z.%n%n"
+                                        + "X = %.3f mm%n"
+                                        + "Y = %.3f mm%n"
+                                        + "Z = %.3f mm",
+                                nozzle.getName(),
+                                nozzleTargetLocation.getX(),
+                                nozzleTargetLocation.getY(),
+                                nozzleTargetLocation.getZ()));
+            });
         }
     };
+
     public final Action viewerAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.colorTrue);
