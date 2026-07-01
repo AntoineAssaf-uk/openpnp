@@ -1849,6 +1849,13 @@ public class JobPanel extends JPanel {
                 return;
             }
 
+            if (!(placementsHolderLocation instanceof BoardLocation)) {
+                MessageBoxes.infoBox(
+                        "Automatic Board Height Detection",
+                        "Please select a board location, not a panel location.");
+                return;
+            }
+
             if (!Boolean.TRUE.equals(boardLocationFiducialsConfirmed.get(placementsHolderLocation))) {
                 MessageBoxes.infoBox(
                         "Automatic Board Height Detection",
@@ -1903,7 +1910,7 @@ public class JobPanel extends JPanel {
                         "The selected nozzle tip is not a ReferenceNozzleTip.");
                 return;
             }
-
+            Length oldBoardZ = placementsHolderLocation.getGlobalLocation().getLengthZ();
             UiUtils.submitUiMachineTask(() -> {
                 AutomaticBoardHeightProbeResult result = null;
                 String failureMessage = null;
@@ -1958,30 +1965,45 @@ public class JobPanel extends JPanel {
                                     + "Nozzle Z was parked and vacuum was turned OFF.");
                     return;
                 }
+                Length detectedBoardZ = new Length(
+                        result.estimatedBoardZ,
+                        nozzleTargetLocation.getUnits());
+
+                placementsHolderLocation.setLocation(
+                        placementsHolderLocation.getGlobalLocation().deriveLengths(
+                                null,
+                                null,
+                                detectedBoardZ,
+                                null));
+
+                jobTableModel.fireTableCellDecendantsUpdated(
+                        placementsHolderLocation,
+                        "Z");
 
                 MessageBoxes.infoBox(
                         "Automatic Board Height Detection",
                         String.format(
-                                "Board height detected.%n%n"
+                                "Board height detected and updated.%n%n"
                                         + "Nozzle: %s%n"
                                         + "Start Z: %.3f mm%n"
                                         + "Fast approach Z: %.3f mm%n"
                                         + "Contact Z: %.3f mm%n"
                                         + "Release Z: %.3f mm%n"
-                                        + "Estimated Board Z: %.3f mm%n"
+                                        + "Old Board Z: %.3f mm%n"
+                                        + "New Board Z: %.3f mm%n"
                                         + "Minimum allowed Z: %.3f mm%n"
                                         + "Vacuum threshold: %.3f%n"
                                         + "Contact vacuum reading: %.3f%n"
                                         + "Release vacuum reading: %.3f%n"
                                         + "Probe steps: %d%n"
                                         + "Retract steps: %d%n%n"
-                                        + "No board Z was updated in this step.%n"
                                         + "Nozzle Z was parked and vacuum was turned OFF.",
                                 nozzle.getName(),
                                 result.startZ,
                                 result.approachZ,
                                 result.contactZ,
                                 result.releaseZ,
+                                oldBoardZ.convertToUnits(nozzleTargetLocation.getUnits()).getValue(),
                                 result.estimatedBoardZ,
                                 result.minZ,
                                 result.threshold,
@@ -1989,6 +2011,7 @@ public class JobPanel extends JPanel {
                                 result.releaseReading,
                                 result.probeSteps,
                                 result.retractSteps));
+
             });
         }
     };
