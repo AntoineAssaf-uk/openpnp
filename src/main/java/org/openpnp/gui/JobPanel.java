@@ -177,12 +177,12 @@ public class JobPanel extends JPanel {
     private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_Z_MM = 8.0;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 0.5;
     private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_STEP_MM = 0.1;
-    private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 3.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 4.0;
     private static final double AUTOMATIC_BOARD_HEIGHT_MAX_RETRACT_MM = 2.0;
-    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.25;
+    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.5;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED = 0.10;
     private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_SPEED = 0.10;
-    private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 250;
+    private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 500;
     private static final int AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS = 500;
 
     private final Map<PlacementsHolderLocation, Boolean> boardLocationFiducialsConfirmed = new HashMap<>();
@@ -1914,6 +1914,7 @@ public class JobPanel extends JPanel {
             UiUtils.submitUiMachineTask(() -> {
                 AutomaticBoardHeightProbeResult result = null;
                 String failureMessage = null;
+                Location nozzleTargetLocation = null;
 
                 try {
                     Camera camera = nozzle.getHead().getDefaultCamera();
@@ -1927,7 +1928,7 @@ public class JobPanel extends JPanel {
 
                     double targetZ = safeZ.convertToUnits(cameraLocation.getUnits()).getValue();
 
-                    Location nozzleTargetLocation = cameraLocation.derive(
+                    nozzleTargetLocation = cameraLocation.derive(
                             null,
                             null,
                             targetZ,
@@ -1947,7 +1948,7 @@ public class JobPanel extends JPanel {
                             nozzleTargetLocation,
                             threshold);
                 } catch (Exception e) {
-                    Logger.warn(e, "Automatic Board Height Detection coarse probe failed.");
+                    Logger.warn(e, "Automatic Board Height Detection probe failed.");
                     failureMessage = e.getMessage();
                 } finally {
                     cleanupAutomaticBoardHeightNozzle(nozzle);
