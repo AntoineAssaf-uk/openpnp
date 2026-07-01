@@ -176,9 +176,12 @@ public class JobPanel extends JPanel {
 
     private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_Z_MM = 8.0;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 0.5;
+    private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_STEP_MM = 0.1;
     private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 3.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_MAX_RETRACT_MM = 2.0;
     private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.25;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED = 0.10;
+    private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_SPEED = 0.10;
     private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 250;
     private static final int AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS = 500;
 
@@ -1604,30 +1607,42 @@ public class JobPanel extends JPanel {
         }
     }
 
-    private static class AutomaticBoardHeightCoarseProbeResult {
+    private static class AutomaticBoardHeightProbeResult {
         private final double startZ;
         private final double approachZ;
         private final double contactZ;
+        private final double releaseZ;
+        private final double estimatedBoardZ;
         private final double minZ;
         private final double threshold;
         private final double contactReading;
-        private final int steps;
+        private final double releaseReading;
+        private final int probeSteps;
+        private final int retractSteps;
 
-        private AutomaticBoardHeightCoarseProbeResult(
+        private AutomaticBoardHeightProbeResult(
                 double startZ,
                 double approachZ,
                 double contactZ,
+                double releaseZ,
+                double estimatedBoardZ,
                 double minZ,
                 double threshold,
                 double contactReading,
-                int steps) {
+                double releaseReading,
+                int probeSteps,
+                int retractSteps) {
             this.startZ = startZ;
             this.approachZ = approachZ;
             this.contactZ = contactZ;
+            this.releaseZ = releaseZ;
+            this.estimatedBoardZ = estimatedBoardZ;
             this.minZ = minZ;
             this.threshold = threshold;
             this.contactReading = contactReading;
-            this.steps = steps;
+            this.releaseReading = releaseReading;
+            this.probeSteps = probeSteps;
+            this.retractSteps = retractSteps;
         }
     }
 
@@ -1651,13 +1666,19 @@ public class JobPanel extends JPanel {
         return min + 0.5 * (max - min);
     }
 
-    private AutomaticBoardHeightCoarseProbeResult probeAutomaticBoardHeightCoarse(
+    private AutomaticBoardHeightProbeResult probeAutomaticBoardHeight(
             Nozzle nozzle,
             Location startLocation,
             double threshold) throws Exception {
 
-        double stepZ = new Length(
+        double probeStepZ = new Length(
                 AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double retractStepZ = new Length(
+                AUTOMATIC_BOARD_HEIGHT_RETRACT_STEP_MM,
                 LengthUnit.Millimeters)
                 .convertToUnits(startLocation.getUnits())
                 .getValue();
@@ -1670,6 +1691,12 @@ public class JobPanel extends JPanel {
 
         double minZ = new Length(
                 AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double maxRetractZ = new Length(
+                AUTOMATIC_BOARD_HEIGHT_MAX_RETRACT_MM,
                 LengthUnit.Millimeters)
                 .convertToUnits(startLocation.getUnits())
                 .getValue();
@@ -1699,8 +1726,10 @@ public class JobPanel extends JPanel {
         nozzle.moveTo(approachLocation, AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED);
         nozzle.waitForCompletion(CompletionType.WaitForStillstand);
 
-        double z = approachZ - stepZ;
-        int steps = 0;
+        double z = approachZ - probeStepZ;
+        int probeSteps = 0;
+        double contactZ;
+        double contactReading;
 
         while (true) {
             if (z < minZ) {
@@ -1724,28 +1753,82 @@ public class JobPanel extends JPanel {
             Thread.sleep(AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS);
 
             double reading = readAutomaticBoardHeightVacuum(nozzle);
-            steps++;
+            probeSteps++;
 
             Logger.info(String.format(
-                    "Automatic Board Height Detection coarse probe: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
-                    steps,
+                    "Automatic Board Height Detection probe: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
+                    probeSteps,
                     z,
                     reading,
                     threshold));
 
             if (reading <= threshold) {
-                return new AutomaticBoardHeightCoarseProbeResult(
-                        startZ,
-                        approachZ,
-                        z,
-                        minZ,
-                        threshold,
-                        reading,
-                        steps);
+                contactZ = z;
+                contactReading = reading;
+                break;
             }
 
-            z -= stepZ;
+            z -= probeStepZ;
         }
+
+        double releaseZ = contactZ;
+        double releaseReading = contactReading;
+        int retractSteps = 0;
+
+        while (true) {
+            releaseZ += retractStepZ;
+
+            if (releaseZ > contactZ + maxRetractZ) {
+                throw new Exception(String.format(
+                        "Board contact release was not detected within the allowed retract distance.%n%n"
+                                + "Contact Z = %.3f mm%n"
+                                + "Last requested release Z = %.3f mm%n"
+                                + "Maximum allowed release Z = %.3f mm",
+                        contactZ,
+                        releaseZ,
+                        contactZ + maxRetractZ));
+            }
+
+            Location releaseLocation = startLocation.derive(
+                    null,
+                    null,
+                    releaseZ,
+                    null);
+
+            nozzle.moveTo(releaseLocation, AUTOMATIC_BOARD_HEIGHT_RETRACT_SPEED);
+            nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+            Thread.sleep(AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS);
+
+            releaseReading = readAutomaticBoardHeightVacuum(nozzle);
+            retractSteps++;
+
+            Logger.info(String.format(
+                    "Automatic Board Height Detection retract: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
+                    retractSteps,
+                    releaseZ,
+                    releaseReading,
+                    threshold));
+
+            if (releaseReading > threshold) {
+                break;
+            }
+        }
+
+        double estimatedBoardZ = 0.5 * (contactZ + releaseZ);
+
+        return new AutomaticBoardHeightProbeResult(
+                startZ,
+                approachZ,
+                contactZ,
+                releaseZ,
+                estimatedBoardZ,
+                minZ,
+                threshold,
+                contactReading,
+                releaseReading,
+                probeSteps,
+                retractSteps);
     }
 
     public final Action automaticBoardHeightAction = new AbstractAction() {
@@ -1822,7 +1905,7 @@ public class JobPanel extends JPanel {
             }
 
             UiUtils.submitUiMachineTask(() -> {
-                AutomaticBoardHeightCoarseProbeResult result = null;
+                AutomaticBoardHeightProbeResult result = null;
                 String failureMessage = null;
 
                 try {
@@ -1852,7 +1935,7 @@ public class JobPanel extends JPanel {
 
                     Thread.sleep(AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS);
 
-                    result = probeAutomaticBoardHeightCoarse(
+                    result = probeAutomaticBoardHeight(
                             nozzle,
                             nozzleTargetLocation,
                             threshold);
@@ -1866,7 +1949,7 @@ public class JobPanel extends JPanel {
                 if (failureMessage != null) {
                     MessageBoxes.infoBox(
                             "Automatic Board Height Detection",
-                            "Automatic Board Height Detection failed during coarse probing."
+                            "Automatic Board Height Detection failed during probing."
                                     + "\n\n"
                                     + failureMessage
                                     + "\n\n"
@@ -1879,25 +1962,33 @@ public class JobPanel extends JPanel {
                 MessageBoxes.infoBox(
                         "Automatic Board Height Detection",
                         String.format(
-                                "Coarse board contact detected.%n%n"
+                                "Board height detected.%n%n"
                                         + "Nozzle: %s%n"
                                         + "Start Z: %.3f mm%n"
                                         + "Fast approach Z: %.3f mm%n"
                                         + "Contact Z: %.3f mm%n"
+                                        + "Release Z: %.3f mm%n"
+                                        + "Estimated Board Z: %.3f mm%n"
                                         + "Minimum allowed Z: %.3f mm%n"
                                         + "Vacuum threshold: %.3f%n"
                                         + "Contact vacuum reading: %.3f%n"
-                                        + "Coarse steps: %d%n%n"
+                                        + "Release vacuum reading: %.3f%n"
+                                        + "Probe steps: %d%n"
+                                        + "Retract steps: %d%n%n"
                                         + "No board Z was updated in this step.%n"
                                         + "Nozzle Z was parked and vacuum was turned OFF.",
                                 nozzle.getName(),
                                 result.startZ,
                                 result.approachZ,
                                 result.contactZ,
+                                result.releaseZ,
+                                result.estimatedBoardZ,
                                 result.minZ,
                                 result.threshold,
                                 result.contactReading,
-                                result.steps));
+                                result.releaseReading,
+                                result.probeSteps,
+                                result.retractSteps));
             });
         }
     };
