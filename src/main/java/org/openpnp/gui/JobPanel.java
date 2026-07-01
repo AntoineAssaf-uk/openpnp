@@ -172,11 +172,15 @@ public class JobPanel extends JPanel {
 
     private JobProcessor jobProcessor;
 
-    private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 1.0;
+    private State state = State.Stopped;
+
+    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_Z_MM = 8.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 0.5;
     private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 3.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.25;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED = 0.10;
     private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 250;
-    private static final int AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS = 100;
+    private static final int AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS = 500;
 
     private final Map<PlacementsHolderLocation, Boolean> boardLocationFiducialsConfirmed = new HashMap<>();
 
@@ -1602,6 +1606,7 @@ public class JobPanel extends JPanel {
 
     private static class AutomaticBoardHeightCoarseProbeResult {
         private final double startZ;
+        private final double approachZ;
         private final double contactZ;
         private final double minZ;
         private final double threshold;
@@ -1610,12 +1615,14 @@ public class JobPanel extends JPanel {
 
         private AutomaticBoardHeightCoarseProbeResult(
                 double startZ,
+                double approachZ,
                 double contactZ,
                 double minZ,
                 double threshold,
                 double contactReading,
                 int steps) {
             this.startZ = startZ;
+            this.approachZ = approachZ;
             this.contactZ = contactZ;
             this.minZ = minZ;
             this.threshold = threshold;
@@ -1655,6 +1662,12 @@ public class JobPanel extends JPanel {
                 .convertToUnits(startLocation.getUnits())
                 .getValue();
 
+        double approachZ = new Length(
+                AUTOMATIC_BOARD_HEIGHT_APPROACH_Z_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
         double minZ = new Length(
                 AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM,
                 LengthUnit.Millimeters)
@@ -1662,14 +1675,38 @@ public class JobPanel extends JPanel {
                 .getValue();
 
         double startZ = startLocation.getZ();
-        double z = startZ;
+
+        if (approachZ < minZ) {
+            throw new Exception(String.format(
+                    "Invalid Automatic Board Height Detection settings.%n%n"
+                            + "Approach Z = %.3f mm%n"
+                            + "Minimum allowed Z = %.3f mm",
+                    approachZ,
+                    minZ));
+        }
+
+        Location approachLocation = startLocation.derive(
+                null,
+                null,
+                approachZ,
+                null);
+
+        Logger.info(String.format(
+                "Automatic Board Height Detection: fast approach from Z=%.3f to Z=%.3f",
+                startZ,
+                approachZ));
+
+        nozzle.moveTo(approachLocation, AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED);
+        nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+        double z = approachZ - stepZ;
         int steps = 0;
 
         while (true) {
             if (z < minZ) {
                 throw new Exception(String.format(
                         "Board contact was not detected before the hard safety limit.%n%n"
-                                + "Last attempted Z = %.3f mm%n"
+                                + "Next requested Z = %.3f mm%n"
                                 + "Minimum allowed Z = %.3f mm",
                         z,
                         minZ));
@@ -1687,6 +1724,7 @@ public class JobPanel extends JPanel {
             Thread.sleep(AUTOMATIC_BOARD_HEIGHT_STEP_SETTLE_MS);
 
             double reading = readAutomaticBoardHeightVacuum(nozzle);
+            steps++;
 
             Logger.info(String.format(
                     "Automatic Board Height Detection coarse probe: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
@@ -1698,6 +1736,7 @@ public class JobPanel extends JPanel {
             if (reading <= threshold) {
                 return new AutomaticBoardHeightCoarseProbeResult(
                         startZ,
+                        approachZ,
                         z,
                         minZ,
                         threshold,
@@ -1706,7 +1745,6 @@ public class JobPanel extends JPanel {
             }
 
             z -= stepZ;
-            steps++;
         }
     }
 
@@ -1844,6 +1882,7 @@ public class JobPanel extends JPanel {
                                 "Coarse board contact detected.%n%n"
                                         + "Nozzle: %s%n"
                                         + "Start Z: %.3f mm%n"
+                                        + "Fast approach Z: %.3f mm%n"
                                         + "Contact Z: %.3f mm%n"
                                         + "Minimum allowed Z: %.3f mm%n"
                                         + "Vacuum threshold: %.3f%n"
@@ -1853,6 +1892,7 @@ public class JobPanel extends JPanel {
                                         + "Nozzle Z was parked and vacuum was turned OFF.",
                                 nozzle.getName(),
                                 result.startZ,
+                                result.approachZ,
                                 result.contactZ,
                                 result.minZ,
                                 result.threshold,
