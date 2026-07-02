@@ -143,15 +143,20 @@ public class PhotonFeederAutomaticSetup {
             throw new Exception("Calibration CSV data is null.");
         }
 
+        String issuedOnTimestamp = PhotonFeederCalibrationCsv.createIssuedOnTimestamp();
+
         SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
 
         if (searchResult.getValidCount() <= 0) {
             throw new Exception("No valid Photon feeders were found for automatic setup.");
         }
 
-        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
+        Path outputFolder = createOutputFolderIfNeeded(calibrationData, issuedOnTimestamp);
 
         List<FirstFeederXyAndZCorrectionResult> feederResults = new ArrayList<>();
+        List<PhotonFeederCalibrationCsv.FeederResultLine> csvResultLines = new ArrayList<>();
+
+        boolean configurationSaved = false;
 
         for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
             if (!feederSummary.isValid()) {
@@ -176,26 +181,72 @@ public class PhotonFeederAutomaticSetup {
                 Location finalSlotLocation = getCurrentSlotLocation(feederSummary);
 
                 Configuration.get().save();
+                configurationSaved = true;
 
                 feederResults.add(new FirstFeederXyAndZCorrectionResult(
                         xyCorrectionResult,
                         zProbeResult,
                         finalSlotLocation,
                         true));
-            } catch (Exception e) {
-                throw new Exception(String.format(Locale.US,
-                        "Automatic setup failed for Slot %d, hardware %s.%n%n%s",
+
+                csvResultLines.add(PhotonFeederCalibrationCsv.FeederResultLine.create(
                         feederSummary.getSlotAddress(),
-                        feederSummary.getHardwareId(),
-                        e.getMessage()), e);
+                        finalSlotLocation,
+                        false));
+            } catch (Exception e) {
+                Location failedSlotLocation = null;
+                try {
+                    failedSlotLocation = getCurrentSlotLocation(feederSummary);
+                    csvResultLines.add(PhotonFeederCalibrationCsv.FeederResultLine.create(
+                            feederSummary.getSlotAddress(),
+                            failedSlotLocation,
+                            true));
+                } catch (Exception locationException) {
+                    Logger.warn(locationException,
+                            "Automatic feeder setup failed to read failed feeder slot location.");
+                }
+
+                PhotonFeederCalibrationCsv.rewriteResults(
+                        calibrationData,
+                        issuedOnTimestamp,
+                        csvResultLines);
+
+                return new AllFeedersXyAndZCorrectionResult(
+                        searchResult,
+                        feederResults,
+                        outputFolder,
+                        configurationSaved,
+                        false,
+                        feederSummary,
+                        failedSlotLocation,
+                        String.format(Locale.US,
+                                "Automatic setup failed for Slot %d, hardware %s.%n%n%s",
+                                feederSummary.getSlotAddress(),
+                                feederSummary.getHardwareId(),
+                                e.getMessage()),
+                        true,
+                        calibrationData.getCsvPath(),
+                        issuedOnTimestamp);
             }
         }
+
+        PhotonFeederCalibrationCsv.rewriteResults(
+                calibrationData,
+                issuedOnTimestamp,
+                csvResultLines);
 
         return new AllFeedersXyAndZCorrectionResult(
                 searchResult,
                 feederResults,
                 outputFolder,
-                true);
+                configurationSaved,
+                true,
+                null,
+                null,
+                null,
+                true,
+                calibrationData.getCsvPath(),
+                issuedOnTimestamp);
     }
 
     public static SearchResult collectValidFeeders() {
@@ -720,11 +771,18 @@ public class PhotonFeederAutomaticSetup {
 
     private static Path createOutputFolderIfNeeded(
             PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
+        return createOutputFolderIfNeeded(
+                calibrationData,
+                LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP));
+    }
+
+    private static Path createOutputFolderIfNeeded(
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData,
+            String timestamp) throws Exception {
         if (!calibrationData.isSaveImages()) {
             return null;
         }
 
-        String timestamp = LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP);
         Path outputFolder = CALIBRATION_FOLDER.resolve(timestamp);
         Files.createDirectories(outputFolder);
         return outputFolder;
@@ -812,22 +870,42 @@ public class PhotonFeederAutomaticSetup {
                 valid,
                 invalidReason);
     }
-
     public static class AllFeedersXyAndZCorrectionResult {
         private final SearchResult searchResult;
         private final List<FirstFeederXyAndZCorrectionResult> feederResults;
         private final Path outputFolder;
         private final boolean configurationSaved;
+        private final boolean success;
+        private final FeederSummary failedFeederSummary;
+        private final Location failedSlotLocation;
+        private final String errorMessage;
+        private final boolean csvRewritten;
+        private final Path csvPath;
+        private final String issuedOnTimestamp;
 
         private AllFeedersXyAndZCorrectionResult(
                 SearchResult searchResult,
                 List<FirstFeederXyAndZCorrectionResult> feederResults,
                 Path outputFolder,
-                boolean configurationSaved) {
+                boolean configurationSaved,
+                boolean success,
+                FeederSummary failedFeederSummary,
+                Location failedSlotLocation,
+                String errorMessage,
+                boolean csvRewritten,
+                Path csvPath,
+                String issuedOnTimestamp) {
             this.searchResult = searchResult;
             this.feederResults = new ArrayList<>(feederResults);
             this.outputFolder = outputFolder;
             this.configurationSaved = configurationSaved;
+            this.success = success;
+            this.failedFeederSummary = failedFeederSummary;
+            this.failedSlotLocation = failedSlotLocation;
+            this.errorMessage = errorMessage;
+            this.csvRewritten = csvRewritten;
+            this.csvPath = csvPath;
+            this.issuedOnTimestamp = issuedOnTimestamp;
         }
 
         public SearchResult getSearchResult() {
@@ -849,8 +927,35 @@ public class PhotonFeederAutomaticSetup {
         public boolean isConfigurationSaved() {
             return configurationSaved;
         }
-    }
 
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public FeederSummary getFailedFeederSummary() {
+            return failedFeederSummary;
+        }
+
+        public Location getFailedSlotLocation() {
+            return failedSlotLocation;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public boolean isCsvRewritten() {
+            return csvRewritten;
+        }
+
+        public Path getCsvPath() {
+            return csvPath;
+        }
+
+        public String getIssuedOnTimestamp() {
+            return issuedOnTimestamp;
+        }
+    }
     public static class FirstFeederXyAndZCorrectionResult {
         private final FirstFeederXyCorrectionResult xyCorrectionResult;
         private final FeederZProbeResult zProbeResult;

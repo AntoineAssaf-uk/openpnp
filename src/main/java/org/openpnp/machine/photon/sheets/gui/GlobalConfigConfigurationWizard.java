@@ -256,7 +256,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                 }
 
                                 appendAutomaticFeederSetupLog(String.format(
-                                                "6.4.7 running XY and Z setup for all valid Photon feeders. Processed feeders: %d.",
+                                                "6.4.8 running XY and Z setup for all valid Photon feeders. Processed feeders: %d.",
                                                 allFeedersResult.getProcessedFeederCount()));
 
                                 if (allFeedersResult.getOutputFolder() != null) {
@@ -357,13 +357,48 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
 
                                 if (allFeedersResult.isConfigurationSaved()) {
                                         appendAutomaticFeederSetupLog(
-                                                        "Configuration saved after all successful feeder XY and Z corrections.");
+                                                        "Configuration saved after successful feeder XY and Z corrections.");
                                 }
 
-                                appendAutomaticFeederSetupLog(
-                                                "6.4.7 complete. All valid Photon feeders were corrected in XY and Z.");
+                                if (allFeedersResult.isCsvRewritten()) {
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "Calibration CSV rewritten: %s",
+                                                        allFeedersResult.getCsvPath()));
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "CSV issued timestamp: %s",
+                                                        allFeedersResult.getIssuedOnTimestamp()));
+                                }
 
-                                appendAutomaticFeederSetupLog("No CSV rewrite was executed.");
+                                if (allFeedersResult.isSuccess()) {
+                                        appendAutomaticFeederSetupLog(
+                                                        "6.4.8 complete. All valid Photon feeders were corrected in XY and Z.");
+                                } else {
+                                        if (allFeedersResult.getFailedFeederSummary() != null) {
+                                                appendAutomaticFeederSetupLog(String.format(
+                                                                "6.4.8 stopped on Slot %d / hardware %s.",
+                                                                allFeedersResult.getFailedFeederSummary()
+                                                                                .getSlotAddress(),
+                                                                allFeedersResult.getFailedFeederSummary()
+                                                                                .getHardwareId()));
+                                        }
+
+                                        if (allFeedersResult.getFailedSlotLocation() != null) {
+                                                appendAutomaticFeederSetupLog(String.format(
+                                                                "Failed slot last known location: X=%.3f Y=%.3f Z=%.3f",
+                                                                allFeedersResult.getFailedSlotLocation().getX(),
+                                                                allFeedersResult.getFailedSlotLocation().getY(),
+                                                                allFeedersResult.getFailedSlotLocation().getZ()));
+                                        }
+
+                                        appendAutomaticFeederSetupLog(
+                                                        "6.4.8 failed. Calibration CSV was rewritten with the failed slot marked error.");
+
+                                        MessageBoxes.errorBox(
+                                                        MainFrame.get(),
+                                                        "Automatic feeder setup error",
+                                                        allFeedersResult.getErrorMessage());
+                                }
+
                         }, (throwable) -> {
                                 progressBarPanel.setVisible(false);
                                 progressBarPanel.clearAllState();

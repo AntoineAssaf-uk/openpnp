@@ -6,7 +6,12 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
+import org.openpnp.model.LengthUnit;
+import org.openpnp.model.Location;
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.Nozzle;
@@ -17,6 +22,7 @@ public class PhotonFeederCalibrationCsv {
 
     private static final String KEY_PHOTON_FEEDER = "PhotonFeeder";
     private static final String KEY_SAVE_IMAGES = "Save Images";
+    private static final DateTimeFormatter CSV_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.US);
 
     private PhotonFeederCalibrationCsv() {
     }
@@ -169,6 +175,42 @@ public class PhotonFeederCalibrationCsv {
                 saveImages);
     }
 
+    public static String createIssuedOnTimestamp() {
+        return LocalDateTime.now().format(CSV_TIMESTAMP);
+    }
+
+    public static void rewriteResults(
+            CalibrationData calibrationData,
+            String issuedOnTimestamp,
+            List<FeederResultLine> resultLines) throws Exception {
+        if (calibrationData == null) {
+            throw new Exception("Calibration CSV data is null.");
+        }
+
+        if (issuedOnTimestamp == null || issuedOnTimestamp.trim().isEmpty()) {
+            throw new Exception("CSV issued-on timestamp is empty.");
+        }
+
+        List<String> outputLines = new ArrayList<>(
+                calibrationData.getPreservedInputLines());
+
+        if (outputLines.isEmpty()) {
+            outputLines.add("Issued on " + issuedOnTimestamp);
+        } else {
+            outputLines.set(0, "Issued on " + issuedOnTimestamp);
+        }
+
+        outputLines.add("");
+
+        if (resultLines != null) {
+            for (FeederResultLine resultLine : resultLines) {
+                outputLines.add(resultLine.toCsvLine());
+            }
+        }
+
+        Files.write(calibrationData.getCsvPath(), outputLines);
+    }
+
     private static boolean isBlankLine(String line) {
         return line == null || line.trim().isEmpty();
     }
@@ -211,8 +253,7 @@ public class PhotonFeederCalibrationCsv {
             int zeroBasedLineNumber) throws Exception {
         try {
             return Integer.parseInt(value.trim());
-        }
-        catch (NumberFormatException e) {
+        } catch (NumberFormatException e) {
             throw new Exception(String.format(
                     "Invalid integer for %s at CSV line %d: %s",
                     name,
@@ -227,8 +268,7 @@ public class PhotonFeederCalibrationCsv {
             int zeroBasedLineNumber) throws Exception {
         try {
             return Double.parseDouble(value.trim());
-        }
-        catch (NumberFormatException e) {
+        } catch (NumberFormatException e) {
             throw new Exception(String.format(
                     "Invalid number for %s at CSV line %d: %s",
                     name,
@@ -255,6 +295,63 @@ public class PhotonFeederCalibrationCsv {
 
     private static String columnName(int index) {
         return String.valueOf((char) ('A' + index));
+    }
+
+    public static class FeederResultLine {
+        private final int slotAddress;
+        private final double x;
+        private final double y;
+        private final double z;
+        private final boolean error;
+
+        private FeederResultLine(
+                int slotAddress,
+                double x,
+                double y,
+                double z,
+                boolean error) {
+            this.slotAddress = slotAddress;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.error = error;
+        }
+
+        public static FeederResultLine create(
+                int slotAddress,
+                Location location,
+                boolean error) throws Exception {
+            if (location == null) {
+                throw new Exception("Cannot create CSV result line because location is null.");
+            }
+
+            Location locationMm = location.convertToUnits(LengthUnit.Millimeters);
+
+            return new FeederResultLine(
+                    slotAddress,
+                    locationMm.getX(),
+                    locationMm.getY(),
+                    locationMm.getZ(),
+                    error);
+        }
+
+        public String toCsvLine() {
+            if (error) {
+                return String.format(Locale.US,
+                        "Slot,%d,Location,%.3f,%.3f,%.3f,error",
+                        slotAddress,
+                        x,
+                        y,
+                        z);
+            }
+
+            return String.format(Locale.US,
+                    "Slot,%d,Location,%.3f,%.3f,%.3f",
+                    slotAddress,
+                    x,
+                    y,
+                    z);
+        }
     }
 
     public static class CalibrationData {
