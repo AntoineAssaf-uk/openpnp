@@ -326,6 +326,11 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                 "Corrections applied: %d.",
                                                 xyCorrectionResult.getCorrectionsApplied()));
 
+                                if (xyCorrectionResult.isConfigurationSaved()) {
+                                        appendAutomaticFeederSetupLog(
+                                                        "Configuration saved after feeder slot XY correction.");
+                                }
+
                                 if (xyCorrectionResult.isSuccess()) {
                                         appendAutomaticFeederSetupLog(
                                                         "6.4.5 complete. First feeder XY correction reached requested precision.");

@@ -119,6 +119,12 @@ public class PhotonFeederAutomaticSetup {
 
         Location finalSlotLocation = getCurrentSlotLocation(firstValidFeeder);
 
+        boolean configurationSaved = false;
+        if (success) {
+            Configuration.get().save();
+            configurationSaved = true;
+        }
+
         return new FirstFeederXyCorrectionResult(
                 searchResult,
                 firstValidFeeder,
@@ -126,7 +132,8 @@ public class PhotonFeederAutomaticSetup {
                 success,
                 correctionsApplied,
                 finalSlotLocation,
-                outputFolder);
+                outputFolder,
+                configurationSaved);
     }
 
     public static SearchResult collectValidFeeders() {
@@ -376,6 +383,7 @@ public class PhotonFeederAutomaticSetup {
         private final int correctionsApplied;
         private final Location finalSlotLocation;
         private final Path outputFolder;
+        private final boolean configurationSaved;
 
         private FirstFeederXyCorrectionResult(
                 SearchResult searchResult,
@@ -384,7 +392,8 @@ public class PhotonFeederAutomaticSetup {
                 boolean success,
                 int correctionsApplied,
                 Location finalSlotLocation,
-                Path outputFolder) {
+                Path outputFolder,
+                boolean configurationSaved) {
             this.searchResult = searchResult;
             this.feederSummary = feederSummary;
             this.measurements = new ArrayList<>(measurements);
@@ -392,6 +401,7 @@ public class PhotonFeederAutomaticSetup {
             this.correctionsApplied = correctionsApplied;
             this.finalSlotLocation = finalSlotLocation;
             this.outputFolder = outputFolder;
+            this.configurationSaved = configurationSaved;
         }
 
         public SearchResult getSearchResult() {
@@ -420,6 +430,10 @@ public class PhotonFeederAutomaticSetup {
 
         public Path getOutputFolder() {
             return outputFolder;
+        }
+
+        public boolean isConfigurationSaved() {
+            return configurationSaved;
         }
     }
 

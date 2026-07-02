@@ -1,5 +1,6 @@
 package org.openpnp.machine.photon;
 
+import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Identifiable;
 import org.openpnp.model.Location;
 import org.openpnp.util.IdentifiableList;
@@ -15,7 +16,7 @@ public class PhotonFeederSlots {
         String slotIdentifier = Slot.getIdentifierFromAddress(address);
         Slot slot = slots.get(slotIdentifier);
 
-        if(slot == null) {
+        if (slot == null) {
             slot = new Slot(address);
             slots.add(slot);
         }
@@ -23,14 +24,15 @@ public class PhotonFeederSlots {
         return slot;
     }
 
-    public static class Slot implements Identifiable {
+    public static class Slot extends AbstractModelObject implements Identifiable {
         @Attribute
         private int address;
 
         @Element(required = false)
         private Location location;
 
-        private Slot() {}
+        private Slot() {
+        }
 
         public Slot(int address) {
             this.address = address;
@@ -54,7 +56,9 @@ public class PhotonFeederSlots {
         }
 
         public void setLocation(Location location) {
+            Location oldLocation = this.location;
             this.location = location;
+            firePropertyChange("location", oldLocation, location);
         }
     }
 }
