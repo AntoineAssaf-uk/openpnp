@@ -13,22 +13,42 @@ import java.util.Locale;
 
 import javax.imageio.ImageIO;
 
+import org.openpnp.machine.reference.ReferenceNozzle;
+import org.openpnp.machine.reference.ReferenceNozzleTip;
 import org.openpnp.machine.reference.capture.ReferenceImageCaptureService;
 import org.openpnp.machine.reference.imageoffset.CsImageOffsetResult;
 import org.openpnp.machine.reference.imageoffset.ReferenceImageOffsetService;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Feeder;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.Machine;
+import org.openpnp.spi.Nozzle;
+import org.openpnp.spi.MotionPlanner.CompletionType;
 import org.openpnp.util.MovableUtils;
+import org.pmw.tinylog.Logger;
 
 public class PhotonFeederAutomaticSetup {
     private static final String HEAD_NAME = "H1";
+
     private static final double MOVE_SPEED = 1.00;
+
+    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_Z_MM = 8.0;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_PROBE_STEP_MM = 0.5;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_RETRACT_STEP_MM = 0.1;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_MIN_Z_MM = 6.0;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_MAX_RETRACT_MM = 2.0;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_SPEED = 0.5;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_PROBE_SPEED = 0.10;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_RETRACT_SPEED = 0.10;
+    private static final int AUTOMATIC_FEEDER_HEIGHT_VACUUM_SETTLE_MS = 500;
+    private static final int AUTOMATIC_FEEDER_HEIGHT_STEP_SETTLE_MS = 500;
+
     private static final Path CALIBRATION_FOLDER = Paths.get("C:\\Opulo\\Data\\Calibration");
+
     private static final DateTimeFormatter OUTPUT_FOLDER_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss",
             Locale.US);
 
@@ -50,17 +70,7 @@ public class PhotonFeederAutomaticSetup {
 
         SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
 
-        FeederSummary firstValidFeeder = null;
-        for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
-            if (feederSummary.isValid()) {
-                firstValidFeeder = feederSummary;
-                break;
-            }
-        }
-
-        if (firstValidFeeder == null) {
-            throw new Exception("No valid Photon feeders were found for automatic setup.");
-        }
+        FeederSummary firstValidFeeder = findFirstValidFeeder(searchResult);
 
         Path outputFolder = createOutputFolderIfNeeded(calibrationData);
 
@@ -82,58 +92,48 @@ public class PhotonFeederAutomaticSetup {
 
         SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
 
-        FeederSummary firstValidFeeder = null;
-        for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
-            if (feederSummary.isValid()) {
-                firstValidFeeder = feederSummary;
-                break;
-            }
+        FeederSummary firstValidFeeder = findFirstValidFeeder(searchResult);
+
+        FirstFeederXyCorrectionResult result = correctFeederXy(firstValidFeeder, searchResult, calibrationData);
+
+        if (result.isSuccess()) {
+            Configuration.get().save();
+            result.setConfigurationSaved(true);
         }
 
-        if (firstValidFeeder == null) {
-            throw new Exception("No valid Photon feeders were found for automatic setup.");
+        return result;
+    }
+
+    public static FirstFeederXyAndZCorrectionResult searchAndCorrectFirstValidFeederXyAndZ(
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData,
+            PhotonFeeder.FeederSearchProgressConsumer progressUpdate) throws Exception {
+        if (calibrationData == null) {
+            throw new Exception("Calibration CSV data is null.");
         }
 
-        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
-        List<OffsetMeasurementResult> measurements = new ArrayList<>();
-        int correctionsApplied = 0;
-        boolean success = false;
+        SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
 
-        for (int tentative = 1; tentative <= calibrationData.getTentatives(); tentative++) {
-            OffsetMeasurementResult measurement = measureFeederFiducialOffset(
-                    firstValidFeeder,
-                    calibrationData,
-                    tentative,
-                    outputFolder);
+        FeederSummary firstValidFeeder = findFirstValidFeeder(searchResult);
 
-            measurements.add(measurement);
+        FirstFeederXyCorrectionResult xyCorrectionResult = correctFeederXy(firstValidFeeder, searchResult,
+                calibrationData);
 
-            if (measurement.isWithinPrecision()) {
-                success = true;
-                break;
-            }
-
-            applyFeederSlotXyCorrection(firstValidFeeder, measurement);
-            correctionsApplied++;
+        if (!xyCorrectionResult.isSuccess()) {
+            throw new Exception("First feeder XY correction did not reach requested precision. "
+                    + "Z probing was not executed.");
         }
+
+        FeederZProbeResult zProbeResult = detectAndUpdateFeederSlotZ(firstValidFeeder, calibrationData);
 
         Location finalSlotLocation = getCurrentSlotLocation(firstValidFeeder);
 
-        boolean configurationSaved = false;
-        if (success) {
-            Configuration.get().save();
-            configurationSaved = true;
-        }
+        Configuration.get().save();
 
-        return new FirstFeederXyCorrectionResult(
-                searchResult,
-                firstValidFeeder,
-                measurements,
-                success,
-                correctionsApplied,
+        return new FirstFeederXyAndZCorrectionResult(
+                xyCorrectionResult,
+                zProbeResult,
                 finalSlotLocation,
-                outputFolder,
-                configurationSaved);
+                true);
     }
 
     public static SearchResult collectValidFeeders() {
@@ -172,6 +172,57 @@ public class PhotonFeederAutomaticSetup {
         }
 
         return new SearchResult(feederSummaries, validCount);
+    }
+
+    private static FeederSummary findFirstValidFeeder(SearchResult searchResult) throws Exception {
+        for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
+            if (feederSummary.isValid()) {
+                return feederSummary;
+            }
+        }
+
+        throw new Exception("No valid Photon feeders were found for automatic setup.");
+    }
+
+    private static FirstFeederXyCorrectionResult correctFeederXy(
+            FeederSummary firstValidFeeder,
+            SearchResult searchResult,
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
+        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
+
+        List<OffsetMeasurementResult> measurements = new ArrayList<>();
+        int correctionsApplied = 0;
+        boolean success = false;
+
+        for (int tentative = 1; tentative <= calibrationData.getTentatives(); tentative++) {
+            OffsetMeasurementResult measurement = measureFeederFiducialOffset(
+                    firstValidFeeder,
+                    calibrationData,
+                    tentative,
+                    outputFolder);
+
+            measurements.add(measurement);
+
+            if (measurement.isWithinPrecision()) {
+                success = true;
+                break;
+            }
+
+            applyFeederSlotXyCorrection(firstValidFeeder, measurement);
+            correctionsApplied++;
+        }
+
+        Location finalSlotLocation = getCurrentSlotLocation(firstValidFeeder);
+
+        return new FirstFeederXyCorrectionResult(
+                searchResult,
+                firstValidFeeder,
+                measurements,
+                success,
+                correctionsApplied,
+                finalSlotLocation,
+                outputFolder,
+                false);
     }
 
     private static OffsetMeasurementResult measureFeederFiducialOffset(
@@ -220,6 +271,7 @@ public class PhotonFeederAutomaticSetup {
         }
 
         BufferedImage monoImage = ReferenceImageCaptureService.createGrayscaleLuminosityImage(originalImage);
+
         BufferedImage cropImage = ReferenceImageCaptureService.cropCentered(
                 monoImage,
                 calibrationData.getCrop());
@@ -283,6 +335,315 @@ public class PhotonFeederAutomaticSetup {
                 savedCropFile);
     }
 
+    private static FeederZProbeResult detectAndUpdateFeederSlotZ(
+            FeederSummary feederSummary,
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
+        Machine machine = Configuration.get().getMachine();
+        if (machine == null) {
+            throw new Exception("No OpenPnP machine configuration is loaded.");
+        }
+        if (!machine.isEnabled()) {
+            throw new Exception("Machine is not enabled. Enable the machine before automatic feeder setup.");
+        }
+        if (!machine.isHomed()) {
+            throw new Exception("Machine is not homed. Home the machine before automatic feeder setup.");
+        }
+
+        Head head = machine.getHeadByName(HEAD_NAME);
+        if (head == null) {
+            throw new Exception("Machine head " + HEAD_NAME + " was not found.");
+        }
+
+        Nozzle nozzle = head.getNozzleByName(calibrationData.getNozzleName());
+        if (nozzle == null) {
+            throw new Exception("Nozzle \"" + calibrationData.getNozzleName()
+                    + "\" was not found on head " + HEAD_NAME + ".");
+        }
+
+        if (!(nozzle instanceof ReferenceNozzle)) {
+            throw new Exception("Automatic feeder setup Z probing currently requires a ReferenceNozzle.");
+        }
+
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+        if (referenceNozzle.getVacuumActuator() == null) {
+            throw new Exception("The selected nozzle has no vacuum actuator configured.");
+        }
+        if (referenceNozzle.getVacuumSenseActuator() == null) {
+            throw new Exception("The selected nozzle has no vacuum sense actuator configured.");
+        }
+        if (!(nozzle.getNozzleTip() instanceof ReferenceNozzleTip)) {
+            throw new Exception("The selected nozzle tip is not a ReferenceNozzleTip.");
+        }
+
+        Location oldSlotLocation = getCurrentSlotLocation(feederSummary);
+
+        Length safeZ = nozzle.getEffectiveSafeZ();
+        if (safeZ == null) {
+            throw new Exception("The selected nozzle has no effective Safe Z.");
+        }
+
+        double targetZ = safeZ.convertToUnits(LengthUnit.Millimeters).getValue();
+
+        Location nozzleTargetLocation = new Location(
+                LengthUnit.Millimeters,
+                oldSlotLocation.getX(),
+                oldSlotLocation.getY(),
+                targetZ,
+                Double.NaN);
+
+        FeederZProbeResult zProbeResult = null;
+
+        try {
+            MovableUtils.moveToLocationAtSafeZ(nozzle, nozzleTargetLocation);
+            MovableUtils.fireTargetedUserAction(nozzle);
+
+            double threshold = getFeederHeightVacuumThreshold(nozzle);
+
+            setFeederHeightVacuum(nozzle, true);
+            Thread.sleep(AUTOMATIC_FEEDER_HEIGHT_VACUUM_SETTLE_MS);
+
+            zProbeResult = probeFeederSlotZ(
+                    nozzle,
+                    nozzleTargetLocation,
+                    threshold,
+                    oldSlotLocation.getZ());
+        } finally {
+            cleanupFeederHeightNozzle(nozzle);
+        }
+
+        Location updatedSlotLocation = oldSlotLocation.derive(
+                null,
+                null,
+                zProbeResult.getEstimatedSlotZ(),
+                null);
+
+        feederSummary.getFeeder().getSlot().setLocation(updatedSlotLocation);
+
+        zProbeResult.setUpdatedSlotLocation(updatedSlotLocation);
+
+        return zProbeResult;
+    }
+
+    private static FeederZProbeResult probeFeederSlotZ(
+            Nozzle nozzle,
+            Location startLocation,
+            double threshold,
+            double oldSlotZ) throws Exception {
+        double probeStepZ = new Length(
+                AUTOMATIC_FEEDER_HEIGHT_PROBE_STEP_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double retractStepZ = new Length(
+                AUTOMATIC_FEEDER_HEIGHT_RETRACT_STEP_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double approachZ = new Length(
+                AUTOMATIC_FEEDER_HEIGHT_APPROACH_Z_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double minZ = new Length(
+                AUTOMATIC_FEEDER_HEIGHT_MIN_Z_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double maxRetractZ = new Length(
+                AUTOMATIC_FEEDER_HEIGHT_MAX_RETRACT_MM,
+                LengthUnit.Millimeters)
+                .convertToUnits(startLocation.getUnits())
+                .getValue();
+
+        double startZ = startLocation.getZ();
+
+        if (approachZ < minZ) {
+            throw new Exception(String.format(Locale.US,
+                    "Invalid automatic feeder Z probing settings.%n%n"
+                            + "Approach Z = %.3f mm%n"
+                            + "Minimum allowed Z = %.3f mm",
+                    approachZ,
+                    minZ));
+        }
+
+        Location approachLocation = startLocation.derive(
+                null,
+                null,
+                approachZ,
+                null);
+
+        Logger.info(String.format(Locale.US,
+                "Automatic feeder Z probing: fast approach from Z=%.3f to Z=%.3f",
+                startZ,
+                approachZ));
+
+        nozzle.moveTo(approachLocation, AUTOMATIC_FEEDER_HEIGHT_APPROACH_SPEED);
+        nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+        double z = approachZ - probeStepZ;
+        int probeSteps = 0;
+        double contactZ;
+        double contactReading;
+
+        while (true) {
+            if (z < minZ) {
+                throw new Exception(String.format(Locale.US,
+                        "Feeder contact was not detected before the hard safety limit.%n%n"
+                                + "Next requested Z = %.3f mm%n"
+                                + "Minimum allowed Z = %.3f mm",
+                        z,
+                        minZ));
+            }
+
+            Location probeLocation = startLocation.derive(
+                    null,
+                    null,
+                    z,
+                    null);
+
+            nozzle.moveTo(probeLocation, AUTOMATIC_FEEDER_HEIGHT_PROBE_SPEED);
+            nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+            Thread.sleep(AUTOMATIC_FEEDER_HEIGHT_STEP_SETTLE_MS);
+
+            double reading = readFeederHeightVacuum(nozzle);
+            probeSteps++;
+
+            Logger.info(String.format(Locale.US,
+                    "Automatic feeder Z probe: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
+                    probeSteps,
+                    z,
+                    reading,
+                    threshold));
+
+            if (reading <= threshold) {
+                contactZ = z;
+                contactReading = reading;
+                break;
+            }
+
+            z -= probeStepZ;
+        }
+
+        double releaseZ = contactZ;
+        double releaseReading = contactReading;
+        int retractSteps = 0;
+
+        while (true) {
+            releaseZ += retractStepZ;
+
+            if (releaseZ > contactZ + maxRetractZ) {
+                throw new Exception(String.format(Locale.US,
+                        "Feeder contact release was not detected within the allowed retract distance.%n%n"
+                                + "Contact Z = %.3f mm%n"
+                                + "Last requested release Z = %.3f mm%n"
+                                + "Maximum allowed release Z = %.3f mm",
+                        contactZ,
+                        releaseZ,
+                        contactZ + maxRetractZ));
+            }
+
+            Location releaseLocation = startLocation.derive(
+                    null,
+                    null,
+                    releaseZ,
+                    null);
+
+            nozzle.moveTo(releaseLocation, AUTOMATIC_FEEDER_HEIGHT_RETRACT_SPEED);
+            nozzle.waitForCompletion(CompletionType.WaitForStillstand);
+
+            Thread.sleep(AUTOMATIC_FEEDER_HEIGHT_STEP_SETTLE_MS);
+
+            releaseReading = readFeederHeightVacuum(nozzle);
+            retractSteps++;
+
+            Logger.info(String.format(Locale.US,
+                    "Automatic feeder Z retract: step=%d Z=%.3f vacuum=%.3f threshold=%.3f",
+                    retractSteps,
+                    releaseZ,
+                    releaseReading,
+                    threshold));
+
+            if (releaseReading > threshold) {
+                break;
+            }
+        }
+
+        double estimatedSlotZ = 0.5 * (contactZ + releaseZ);
+
+        return new FeederZProbeResult(
+                nozzle.getName(),
+                oldSlotZ,
+                startZ,
+                approachZ,
+                contactZ,
+                releaseZ,
+                estimatedSlotZ,
+                minZ,
+                threshold,
+                contactReading,
+                releaseReading,
+                probeSteps,
+                retractSteps);
+    }
+
+    private static void setFeederHeightVacuum(Nozzle nozzle, boolean on) throws Exception {
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+
+        if (on) {
+            nozzle.getHead().actuatePumpRequest(nozzle, true);
+        }
+
+        referenceNozzle.getExpectedVacuumActuator().actuate(on);
+
+        if (!on) {
+            nozzle.getHead().actuatePumpRequest(nozzle, false);
+        }
+    }
+
+    private static double readFeederHeightVacuum(Nozzle nozzle) throws Exception {
+        ReferenceNozzle referenceNozzle = (ReferenceNozzle) nozzle;
+        return referenceNozzle.readVacuumLevel();
+    }
+
+    private static void cleanupFeederHeightNozzle(Nozzle nozzle) {
+        try {
+            nozzle.getHead().moveToSafeZ();
+        } catch (Exception e) {
+            Logger.warn(e, "Automatic feeder Z probing: failed to park nozzle Z.");
+        }
+
+        try {
+            setFeederHeightVacuum(nozzle, false);
+        } catch (Exception e) {
+            Logger.warn(e, "Automatic feeder Z probing: failed to turn vacuum off.");
+        }
+    }
+
+    private static double getFeederHeightVacuumThreshold(Nozzle nozzle) throws Exception {
+        if (!(nozzle.getNozzleTip() instanceof ReferenceNozzleTip)) {
+            throw new Exception("The selected nozzle tip is not a ReferenceNozzleTip.");
+        }
+
+        ReferenceNozzleTip nozzleTip = (ReferenceNozzleTip) nozzle.getNozzleTip();
+
+        double low = nozzleTip.getVacuumLevelPartOnLow();
+        double high = nozzleTip.getVacuumLevelPartOnHigh();
+
+        if (low == high) {
+            throw new Exception("The selected nozzle tip has invalid vacuum thresholds.");
+        }
+
+        double min = Math.min(low, high);
+        double max = Math.max(low, high);
+
+        return min + 0.5 * (max - min);
+    }
+
     private static Path createOutputFolderIfNeeded(
             PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
         if (!calibrationData.isSaveImages()) {
@@ -301,12 +662,14 @@ public class PhotonFeederAutomaticSetup {
         }
 
         if (feederSummary.getFeeder().getSlot() == null) {
-            throw new Exception("Slot object is missing for slot " + feederSummary.getSlotAddress() + ".");
+            throw new Exception("Slot object is missing for slot "
+                    + feederSummary.getSlotAddress() + ".");
         }
 
         Location slotLocation = feederSummary.getFeeder().getSlot().getLocation();
         if (slotLocation == null) {
-            throw new Exception("Slot location is null for slot " + feederSummary.getSlotAddress() + ".");
+            throw new Exception("Slot location is null for slot "
+                    + feederSummary.getSlotAddress() + ".");
         }
 
         return slotLocation.convertToUnits(LengthUnit.Millimeters);
@@ -332,6 +695,7 @@ public class PhotonFeederAutomaticSetup {
         if (image == null) {
             throw new Exception("Cannot save BMP file because image is null: " + file);
         }
+
         boolean ok = ImageIO.write(image, "bmp", file.toFile());
         if (!ok) {
             throw new Exception("No BMP image writer is available for file: " + file);
@@ -375,6 +739,146 @@ public class PhotonFeederAutomaticSetup {
                 invalidReason);
     }
 
+    public static class FirstFeederXyAndZCorrectionResult {
+        private final FirstFeederXyCorrectionResult xyCorrectionResult;
+        private final FeederZProbeResult zProbeResult;
+        private final Location finalSlotLocation;
+        private final boolean configurationSaved;
+
+        private FirstFeederXyAndZCorrectionResult(
+                FirstFeederXyCorrectionResult xyCorrectionResult,
+                FeederZProbeResult zProbeResult,
+                Location finalSlotLocation,
+                boolean configurationSaved) {
+            this.xyCorrectionResult = xyCorrectionResult;
+            this.zProbeResult = zProbeResult;
+            this.finalSlotLocation = finalSlotLocation;
+            this.configurationSaved = configurationSaved;
+        }
+
+        public FirstFeederXyCorrectionResult getXyCorrectionResult() {
+            return xyCorrectionResult;
+        }
+
+        public FeederZProbeResult getZProbeResult() {
+            return zProbeResult;
+        }
+
+        public Location getFinalSlotLocation() {
+            return finalSlotLocation;
+        }
+
+        public boolean isConfigurationSaved() {
+            return configurationSaved;
+        }
+    }
+
+    public static class FeederZProbeResult {
+        private final String nozzleName;
+        private final double oldSlotZ;
+        private final double startZ;
+        private final double approachZ;
+        private final double contactZ;
+        private final double releaseZ;
+        private final double estimatedSlotZ;
+        private final double minZ;
+        private final double threshold;
+        private final double contactReading;
+        private final double releaseReading;
+        private final int probeSteps;
+        private final int retractSteps;
+        private Location updatedSlotLocation;
+
+        private FeederZProbeResult(
+                String nozzleName,
+                double oldSlotZ,
+                double startZ,
+                double approachZ,
+                double contactZ,
+                double releaseZ,
+                double estimatedSlotZ,
+                double minZ,
+                double threshold,
+                double contactReading,
+                double releaseReading,
+                int probeSteps,
+                int retractSteps) {
+            this.nozzleName = nozzleName;
+            this.oldSlotZ = oldSlotZ;
+            this.startZ = startZ;
+            this.approachZ = approachZ;
+            this.contactZ = contactZ;
+            this.releaseZ = releaseZ;
+            this.estimatedSlotZ = estimatedSlotZ;
+            this.minZ = minZ;
+            this.threshold = threshold;
+            this.contactReading = contactReading;
+            this.releaseReading = releaseReading;
+            this.probeSteps = probeSteps;
+            this.retractSteps = retractSteps;
+        }
+
+        private void setUpdatedSlotLocation(Location updatedSlotLocation) {
+            this.updatedSlotLocation = updatedSlotLocation;
+        }
+
+        public String getNozzleName() {
+            return nozzleName;
+        }
+
+        public double getOldSlotZ() {
+            return oldSlotZ;
+        }
+
+        public double getStartZ() {
+            return startZ;
+        }
+
+        public double getApproachZ() {
+            return approachZ;
+        }
+
+        public double getContactZ() {
+            return contactZ;
+        }
+
+        public double getReleaseZ() {
+            return releaseZ;
+        }
+
+        public double getEstimatedSlotZ() {
+            return estimatedSlotZ;
+        }
+
+        public double getMinZ() {
+            return minZ;
+        }
+
+        public double getThreshold() {
+            return threshold;
+        }
+
+        public double getContactReading() {
+            return contactReading;
+        }
+
+        public double getReleaseReading() {
+            return releaseReading;
+        }
+
+        public int getProbeSteps() {
+            return probeSteps;
+        }
+
+        public int getRetractSteps() {
+            return retractSteps;
+        }
+
+        public Location getUpdatedSlotLocation() {
+            return updatedSlotLocation;
+        }
+    }
+
     public static class FirstFeederXyCorrectionResult {
         private final SearchResult searchResult;
         private final FeederSummary feederSummary;
@@ -383,7 +887,7 @@ public class PhotonFeederAutomaticSetup {
         private final int correctionsApplied;
         private final Location finalSlotLocation;
         private final Path outputFolder;
-        private final boolean configurationSaved;
+        private boolean configurationSaved;
 
         private FirstFeederXyCorrectionResult(
                 SearchResult searchResult,
@@ -401,6 +905,10 @@ public class PhotonFeederAutomaticSetup {
             this.correctionsApplied = correctionsApplied;
             this.finalSlotLocation = finalSlotLocation;
             this.outputFolder = outputFolder;
+            this.configurationSaved = configurationSaved;
+        }
+
+        private void setConfigurationSaved(boolean configurationSaved) {
             this.configurationSaved = configurationSaved;
         }
 

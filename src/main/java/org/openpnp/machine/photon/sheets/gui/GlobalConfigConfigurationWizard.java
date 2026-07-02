@@ -215,13 +215,16 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                         + maxFeederAddress + ".");
 
                         UiUtils.submitUiMachineTask(() -> {
-                                return PhotonFeederAutomaticSetup.searchAndCorrectFirstValidFeederXy(
+                                return PhotonFeederAutomaticSetup.searchAndCorrectFirstValidFeederXyAndZ(
                                                 calibrationData,
                                                 progressBarPanel::updateFeederState);
-                        }, (xyCorrectionResult) -> {
+                        }, (xyAndZCorrectionResult) -> {
                                 progressBarPanel.setVisible(false);
                                 progressBarPanel.clearAllState();
                                 setSearchControlsEnabled(true);
+
+                                PhotonFeederAutomaticSetup.FirstFeederXyCorrectionResult xyCorrectionResult = xyAndZCorrectionResult
+                                                .getXyCorrectionResult();
 
                                 PhotonFeederAutomaticSetup.SearchResult searchResult = xyCorrectionResult
                                                 .getSearchResult();
@@ -259,7 +262,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                 .getFeederSummary();
 
                                 appendAutomaticFeederSetupLog(String.format(
-                                                "6.4.5 correcting first valid feeder only: Slot %d, hardware %s.",
+                                                "6.4.6 correcting first valid feeder XY and Z only: Slot %d, hardware %s.",
                                                 measuredFeeder.getSlotAddress(),
                                                 measuredFeeder.getHardwareId()));
 
@@ -316,36 +319,56 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                 }
 
                                 appendAutomaticFeederSetupLog(String.format(
-                                                "Final Slot %d location: X=%.3f Y=%.3f Z=%.3f",
-                                                measuredFeeder.getSlotAddress(),
-                                                xyCorrectionResult.getFinalSlotLocation().getX(),
-                                                xyCorrectionResult.getFinalSlotLocation().getY(),
-                                                xyCorrectionResult.getFinalSlotLocation().getZ()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Corrections applied: %d.",
+                                                "XY corrections applied: %d.",
                                                 xyCorrectionResult.getCorrectionsApplied()));
 
-                                if (xyCorrectionResult.isConfigurationSaved()) {
+                                PhotonFeederAutomaticSetup.FeederZProbeResult zProbeResult = xyAndZCorrectionResult
+                                                .getZProbeResult();
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Z probing nozzle: %s",
+                                                zProbeResult.getNozzleName()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Z probing: start Z=%.3f mm, approach Z=%.3f mm, contact Z=%.3f mm, release Z=%.3f mm",
+                                                zProbeResult.getStartZ(),
+                                                zProbeResult.getApproachZ(),
+                                                zProbeResult.getContactZ(),
+                                                zProbeResult.getReleaseZ()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Z probing: old slot Z=%.3f mm, new slot Z=%.3f mm, minimum allowed Z=%.3f mm",
+                                                zProbeResult.getOldSlotZ(),
+                                                zProbeResult.getEstimatedSlotZ(),
+                                                zProbeResult.getMinZ()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Z probing: vacuum threshold=%.3f, contact reading=%.3f, release reading=%.3f",
+                                                zProbeResult.getThreshold(),
+                                                zProbeResult.getContactReading(),
+                                                zProbeResult.getReleaseReading()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Z probing: probe steps=%d, retract steps=%d.",
+                                                zProbeResult.getProbeSteps(),
+                                                zProbeResult.getRetractSteps()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Final Slot %d location: X=%.3f Y=%.3f Z=%.3f",
+                                                measuredFeeder.getSlotAddress(),
+                                                xyAndZCorrectionResult.getFinalSlotLocation().getX(),
+                                                xyAndZCorrectionResult.getFinalSlotLocation().getY(),
+                                                xyAndZCorrectionResult.getFinalSlotLocation().getZ()));
+
+                                if (xyAndZCorrectionResult.isConfigurationSaved()) {
                                         appendAutomaticFeederSetupLog(
-                                                        "Configuration saved after feeder slot XY correction.");
+                                                        "Configuration saved after feeder slot XY and Z correction.");
                                 }
 
-                                if (xyCorrectionResult.isSuccess()) {
-                                        appendAutomaticFeederSetupLog(
-                                                        "6.4.5 complete. First feeder XY correction reached requested precision.");
-                                } else {
-                                        appendAutomaticFeederSetupLog(
-                                                        "6.4.5 failed. First feeder XY correction did not reach requested precision.");
-                                        MessageBoxes.errorBox(
-                                                        MainFrame.get(),
-                                                        "Automatic feeder setup XY correction error",
-                                                        "First feeder XY correction did not reach requested precision within "
-                                                                        + calibrationData.getTentatives()
-                                                                        + " tentatives.");
-                                }
+                                appendAutomaticFeederSetupLog(
+                                                "6.4.6 complete. First feeder XY and Z correction reached requested precision.");
 
-                                appendAutomaticFeederSetupLog("No Z probing or CSV rewrite was executed.");
+                                appendAutomaticFeederSetupLog("No CSV rewrite was executed.");
                         }, (throwable) -> {
                                 progressBarPanel.setVisible(false);
                                 progressBarPanel.clearAllState();
