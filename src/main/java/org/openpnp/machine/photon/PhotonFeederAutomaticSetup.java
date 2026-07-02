@@ -136,6 +136,68 @@ public class PhotonFeederAutomaticSetup {
                 true);
     }
 
+    public static AllFeedersXyAndZCorrectionResult searchAndCorrectAllValidFeedersXyAndZ(
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData,
+            PhotonFeeder.FeederSearchProgressConsumer progressUpdate) throws Exception {
+        if (calibrationData == null) {
+            throw new Exception("Calibration CSV data is null.");
+        }
+
+        SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
+
+        if (searchResult.getValidCount() <= 0) {
+            throw new Exception("No valid Photon feeders were found for automatic setup.");
+        }
+
+        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
+
+        List<FirstFeederXyAndZCorrectionResult> feederResults = new ArrayList<>();
+
+        for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
+            if (!feederSummary.isValid()) {
+                continue;
+            }
+
+            try {
+                FirstFeederXyCorrectionResult xyCorrectionResult = correctFeederXy(
+                        feederSummary,
+                        searchResult,
+                        calibrationData,
+                        outputFolder);
+
+                if (!xyCorrectionResult.isSuccess()) {
+                    throw new Exception("XY correction did not reach requested precision within "
+                            + calibrationData.getTentatives()
+                            + " tentatives.");
+                }
+
+                FeederZProbeResult zProbeResult = detectAndUpdateFeederSlotZ(feederSummary, calibrationData);
+
+                Location finalSlotLocation = getCurrentSlotLocation(feederSummary);
+
+                Configuration.get().save();
+
+                feederResults.add(new FirstFeederXyAndZCorrectionResult(
+                        xyCorrectionResult,
+                        zProbeResult,
+                        finalSlotLocation,
+                        true));
+            } catch (Exception e) {
+                throw new Exception(String.format(Locale.US,
+                        "Automatic setup failed for Slot %d, hardware %s.%n%n%s",
+                        feederSummary.getSlotAddress(),
+                        feederSummary.getHardwareId(),
+                        e.getMessage()), e);
+            }
+        }
+
+        return new AllFeedersXyAndZCorrectionResult(
+                searchResult,
+                feederResults,
+                outputFolder,
+                true);
+    }
+
     public static SearchResult collectValidFeeders() {
         List<FeederSummary> feederSummaries = new ArrayList<>();
 
@@ -185,18 +247,30 @@ public class PhotonFeederAutomaticSetup {
     }
 
     private static FirstFeederXyCorrectionResult correctFeederXy(
-            FeederSummary firstValidFeeder,
+            FeederSummary feederSummary,
             SearchResult searchResult,
             PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
         Path outputFolder = createOutputFolderIfNeeded(calibrationData);
 
+        return correctFeederXy(
+                feederSummary,
+                searchResult,
+                calibrationData,
+                outputFolder);
+    }
+
+    private static FirstFeederXyCorrectionResult correctFeederXy(
+            FeederSummary feederSummary,
+            SearchResult searchResult,
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData,
+            Path outputFolder) throws Exception {
         List<OffsetMeasurementResult> measurements = new ArrayList<>();
         int correctionsApplied = 0;
         boolean success = false;
 
         for (int tentative = 1; tentative <= calibrationData.getTentatives(); tentative++) {
             OffsetMeasurementResult measurement = measureFeederFiducialOffset(
-                    firstValidFeeder,
+                    feederSummary,
                     calibrationData,
                     tentative,
                     outputFolder);
@@ -208,15 +282,15 @@ public class PhotonFeederAutomaticSetup {
                 break;
             }
 
-            applyFeederSlotXyCorrection(firstValidFeeder, measurement);
+            applyFeederSlotXyCorrection(feederSummary, measurement);
             correctionsApplied++;
         }
 
-        Location finalSlotLocation = getCurrentSlotLocation(firstValidFeeder);
+        Location finalSlotLocation = getCurrentSlotLocation(feederSummary);
 
         return new FirstFeederXyCorrectionResult(
                 searchResult,
-                firstValidFeeder,
+                feederSummary,
                 measurements,
                 success,
                 correctionsApplied,
@@ -737,6 +811,44 @@ public class PhotonFeederAutomaticSetup {
                 slotLocation,
                 valid,
                 invalidReason);
+    }
+
+    public static class AllFeedersXyAndZCorrectionResult {
+        private final SearchResult searchResult;
+        private final List<FirstFeederXyAndZCorrectionResult> feederResults;
+        private final Path outputFolder;
+        private final boolean configurationSaved;
+
+        private AllFeedersXyAndZCorrectionResult(
+                SearchResult searchResult,
+                List<FirstFeederXyAndZCorrectionResult> feederResults,
+                Path outputFolder,
+                boolean configurationSaved) {
+            this.searchResult = searchResult;
+            this.feederResults = new ArrayList<>(feederResults);
+            this.outputFolder = outputFolder;
+            this.configurationSaved = configurationSaved;
+        }
+
+        public SearchResult getSearchResult() {
+            return searchResult;
+        }
+
+        public List<FirstFeederXyAndZCorrectionResult> getFeederResults() {
+            return Collections.unmodifiableList(feederResults);
+        }
+
+        public int getProcessedFeederCount() {
+            return feederResults.size();
+        }
+
+        public Path getOutputFolder() {
+            return outputFolder;
+        }
+
+        public boolean isConfigurationSaved() {
+            return configurationSaved;
+        }
     }
 
     public static class FirstFeederXyAndZCorrectionResult {

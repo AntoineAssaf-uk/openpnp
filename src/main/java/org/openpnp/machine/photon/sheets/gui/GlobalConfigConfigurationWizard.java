@@ -215,18 +215,15 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                         + maxFeederAddress + ".");
 
                         UiUtils.submitUiMachineTask(() -> {
-                                return PhotonFeederAutomaticSetup.searchAndCorrectFirstValidFeederXyAndZ(
+                                return PhotonFeederAutomaticSetup.searchAndCorrectAllValidFeedersXyAndZ(
                                                 calibrationData,
                                                 progressBarPanel::updateFeederState);
-                        }, (xyAndZCorrectionResult) -> {
+                        }, (allFeedersResult) -> {
                                 progressBarPanel.setVisible(false);
                                 progressBarPanel.clearAllState();
                                 setSearchControlsEnabled(true);
 
-                                PhotonFeederAutomaticSetup.FirstFeederXyCorrectionResult xyCorrectionResult = xyAndZCorrectionResult
-                                                .getXyCorrectionResult();
-
-                                PhotonFeederAutomaticSetup.SearchResult searchResult = xyCorrectionResult
+                                PhotonFeederAutomaticSetup.SearchResult searchResult = allFeedersResult
                                                 .getSearchResult();
 
                                 appendAutomaticFeederSetupLog("Photon feeder search completed.");
@@ -240,7 +237,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                 .getFeederSummaries()) {
                                         if (feederSummary.isValid()) {
                                                 appendAutomaticFeederSetupLog(String.format(
-                                                                "VALID  Slot %d  %s  Location X=%.3f Y=%.3f Z=%.3f",
+                                                                "VALID  Slot %d  %s  Initial Location X=%.3f Y=%.3f Z=%.3f",
                                                                 feederSummary.getSlotAddress(),
                                                                 feederSummary.getHardwareId(),
                                                                 feederSummary.getSlotLocation().getX(),
@@ -258,115 +255,113 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                         }
                                 }
 
-                                PhotonFeederAutomaticSetup.FeederSummary measuredFeeder = xyCorrectionResult
-                                                .getFeederSummary();
-
                                 appendAutomaticFeederSetupLog(String.format(
-                                                "6.4.6 correcting first valid feeder XY and Z only: Slot %d, hardware %s.",
-                                                measuredFeeder.getSlotAddress(),
-                                                measuredFeeder.getHardwareId()));
+                                                "6.4.7 running XY and Z setup for all valid Photon feeders. Processed feeders: %d.",
+                                                allFeedersResult.getProcessedFeederCount()));
 
-                                if (xyCorrectionResult.getOutputFolder() != null) {
+                                if (allFeedersResult.getOutputFolder() != null) {
                                         appendAutomaticFeederSetupLog("Saved captured crops in: "
-                                                        + xyCorrectionResult.getOutputFolder());
+                                                        + allFeedersResult.getOutputFolder());
                                 }
 
-                                for (PhotonFeederAutomaticSetup.OffsetMeasurementResult offsetResult : xyCorrectionResult
-                                                .getMeasurements()) {
-                                        appendAutomaticFeederSetupLog(String.format(
-                                                        "Tentative %d/%d: Slot location X=%.3f Y=%.3f Z=%.3f",
-                                                        offsetResult.getTentative(),
-                                                        calibrationData.getTentatives(),
-                                                        offsetResult.getSlotLocation().getX(),
-                                                        offsetResult.getSlotLocation().getY(),
-                                                        offsetResult.getSlotLocation().getZ()));
+                                for (PhotonFeederAutomaticSetup.FirstFeederXyAndZCorrectionResult feederResult : allFeedersResult
+                                                .getFeederResults()) {
+                                        PhotonFeederAutomaticSetup.FirstFeederXyCorrectionResult xyCorrectionResult = feederResult
+                                                        .getXyCorrectionResult();
+
+                                        PhotonFeederAutomaticSetup.FeederSummary measuredFeeder = xyCorrectionResult
+                                                        .getFeederSummary();
 
                                         appendAutomaticFeederSetupLog(String.format(
-                                                        "Tentative %d: Image offset dx=%.6f px, dy=%.6f px, peak=%.9f, dt=%d ms",
-                                                        offsetResult.getTentative(),
-                                                        offsetResult.getDxPixels(),
-                                                        offsetResult.getDyPixels(),
-                                                        offsetResult.getPeak(),
-                                                        offsetResult.getDtMs()));
+                                                        "Slot %d / hardware %s automatic setup completed.",
+                                                        measuredFeeder.getSlotAddress(),
+                                                        measuredFeeder.getHardwareId()));
 
-                                        appendAutomaticFeederSetupLog(String.format(
-                                                        "Tentative %d: Correction dx=%.6f mm / %.3f um, dy=%.6f mm / %.3f um",
-                                                        offsetResult.getTentative(),
-                                                        offsetResult.getDxMm(),
-                                                        offsetResult.getDxUm(),
-                                                        offsetResult.getDyMm(),
-                                                        offsetResult.getDyUm()));
-
-                                        appendAutomaticFeederSetupLog(String.format(
-                                                        "Tentative %d: Precision check |dx| <= %.3f um and |dy| <= %.3f um -> %s",
-                                                        offsetResult.getTentative(),
-                                                        calibrationData.getPrecisionUm(),
-                                                        calibrationData.getPrecisionUm(),
-                                                        offsetResult.isWithinPrecision() ? "PASS" : "FAIL"));
-
-                                        if (!offsetResult.isWithinPrecision()) {
+                                        for (PhotonFeederAutomaticSetup.OffsetMeasurementResult offsetResult : xyCorrectionResult
+                                                        .getMeasurements()) {
                                                 appendAutomaticFeederSetupLog(String.format(
-                                                                "Tentative %d: Applied slot correction using X = X + dx, Y = Y + dy.",
-                                                                offsetResult.getTentative()));
+                                                                "Slot %d Tentative %d/%d: Location X=%.3f Y=%.3f Z=%.3f",
+                                                                measuredFeeder.getSlotAddress(),
+                                                                offsetResult.getTentative(),
+                                                                calibrationData.getTentatives(),
+                                                                offsetResult.getSlotLocation().getX(),
+                                                                offsetResult.getSlotLocation().getY(),
+                                                                offsetResult.getSlotLocation().getZ()));
+
+                                                appendAutomaticFeederSetupLog(String.format(
+                                                                "Slot %d Tentative %d: dx=%.3f um, dy=%.3f um, peak=%.9f, dt=%d ms, precision=%s",
+                                                                measuredFeeder.getSlotAddress(),
+                                                                offsetResult.getTentative(),
+                                                                offsetResult.getDxUm(),
+                                                                offsetResult.getDyUm(),
+                                                                offsetResult.getPeak(),
+                                                                offsetResult.getDtMs(),
+                                                                offsetResult.isWithinPrecision() ? "PASS" : "FAIL"));
+
+                                                if (!offsetResult.isWithinPrecision()) {
+                                                        appendAutomaticFeederSetupLog(String.format(
+                                                                        "Slot %d Tentative %d: Applied X = X + dx, Y = Y + dy.",
+                                                                        measuredFeeder.getSlotAddress(),
+                                                                        offsetResult.getTentative()));
+                                                }
+
+                                                if (offsetResult.getSavedCropFile() != null) {
+                                                        appendAutomaticFeederSetupLog("Slot "
+                                                                        + measuredFeeder.getSlotAddress()
+                                                                        + " Tentative "
+                                                                        + offsetResult.getTentative()
+                                                                        + ": Saved captured crop: "
+                                                                        + offsetResult.getSavedCropFile());
+                                                }
                                         }
 
-                                        if (offsetResult.getSavedCropFile() != null) {
-                                                appendAutomaticFeederSetupLog("Tentative "
-                                                                + offsetResult.getTentative()
-                                                                + ": Saved captured crop: "
-                                                                + offsetResult.getSavedCropFile());
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "Slot %d XY corrections applied: %d.",
+                                                        measuredFeeder.getSlotAddress(),
+                                                        xyCorrectionResult.getCorrectionsApplied()));
+
+                                        PhotonFeederAutomaticSetup.FeederZProbeResult zProbeResult = feederResult
+                                                        .getZProbeResult();
+
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "Slot %d Z probing: nozzle=%s, old Z=%.3f mm, contact Z=%.3f mm, release Z=%.3f mm, new Z=%.3f mm",
+                                                        measuredFeeder.getSlotAddress(),
+                                                        zProbeResult.getNozzleName(),
+                                                        zProbeResult.getOldSlotZ(),
+                                                        zProbeResult.getContactZ(),
+                                                        zProbeResult.getReleaseZ(),
+                                                        zProbeResult.getEstimatedSlotZ()));
+
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "Slot %d Z probing: threshold=%.3f, contact reading=%.3f, release reading=%.3f, probe steps=%d, retract steps=%d",
+                                                        measuredFeeder.getSlotAddress(),
+                                                        zProbeResult.getThreshold(),
+                                                        zProbeResult.getContactReading(),
+                                                        zProbeResult.getReleaseReading(),
+                                                        zProbeResult.getProbeSteps(),
+                                                        zProbeResult.getRetractSteps()));
+
+                                        appendAutomaticFeederSetupLog(String.format(
+                                                        "Slot %d final location: X=%.3f Y=%.3f Z=%.3f",
+                                                        measuredFeeder.getSlotAddress(),
+                                                        feederResult.getFinalSlotLocation().getX(),
+                                                        feederResult.getFinalSlotLocation().getY(),
+                                                        feederResult.getFinalSlotLocation().getZ()));
+
+                                        if (feederResult.isConfigurationSaved()) {
+                                                appendAutomaticFeederSetupLog(String.format(
+                                                                "Slot %d configuration saved.",
+                                                                measuredFeeder.getSlotAddress()));
                                         }
                                 }
 
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "XY corrections applied: %d.",
-                                                xyCorrectionResult.getCorrectionsApplied()));
-
-                                PhotonFeederAutomaticSetup.FeederZProbeResult zProbeResult = xyAndZCorrectionResult
-                                                .getZProbeResult();
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Z probing nozzle: %s",
-                                                zProbeResult.getNozzleName()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Z probing: start Z=%.3f mm, approach Z=%.3f mm, contact Z=%.3f mm, release Z=%.3f mm",
-                                                zProbeResult.getStartZ(),
-                                                zProbeResult.getApproachZ(),
-                                                zProbeResult.getContactZ(),
-                                                zProbeResult.getReleaseZ()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Z probing: old slot Z=%.3f mm, new slot Z=%.3f mm, minimum allowed Z=%.3f mm",
-                                                zProbeResult.getOldSlotZ(),
-                                                zProbeResult.getEstimatedSlotZ(),
-                                                zProbeResult.getMinZ()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Z probing: vacuum threshold=%.3f, contact reading=%.3f, release reading=%.3f",
-                                                zProbeResult.getThreshold(),
-                                                zProbeResult.getContactReading(),
-                                                zProbeResult.getReleaseReading()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Z probing: probe steps=%d, retract steps=%d.",
-                                                zProbeResult.getProbeSteps(),
-                                                zProbeResult.getRetractSteps()));
-
-                                appendAutomaticFeederSetupLog(String.format(
-                                                "Final Slot %d location: X=%.3f Y=%.3f Z=%.3f",
-                                                measuredFeeder.getSlotAddress(),
-                                                xyAndZCorrectionResult.getFinalSlotLocation().getX(),
-                                                xyAndZCorrectionResult.getFinalSlotLocation().getY(),
-                                                xyAndZCorrectionResult.getFinalSlotLocation().getZ()));
-
-                                if (xyAndZCorrectionResult.isConfigurationSaved()) {
+                                if (allFeedersResult.isConfigurationSaved()) {
                                         appendAutomaticFeederSetupLog(
-                                                        "Configuration saved after feeder slot XY and Z correction.");
+                                                        "Configuration saved after all successful feeder XY and Z corrections.");
                                 }
 
                                 appendAutomaticFeederSetupLog(
-                                                "6.4.6 complete. First feeder XY and Z correction reached requested precision.");
+                                                "6.4.7 complete. All valid Photon feeders were corrected in XY and Z.");
 
                                 appendAutomaticFeederSetupLog("No CSV rewrite was executed.");
                         }, (throwable) -> {
@@ -381,6 +376,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                 "Automatic feeder setup error",
                                                 throwable);
                         });
+
                 }
         };
 
