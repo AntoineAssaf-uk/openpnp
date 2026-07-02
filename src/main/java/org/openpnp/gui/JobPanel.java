@@ -178,8 +178,8 @@ public class JobPanel extends JPanel {
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_STEP_MM = 0.5;
     private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_STEP_MM = 0.1;
     private static final double AUTOMATIC_BOARD_HEIGHT_MIN_Z_MM = 4.0;
-    private static final double AUTOMATIC_BOARD_HEIGHT_MAX_RETRACT_MM = 2.0;
-    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.5;
+    private static final double AUTOMATIC_BOARD_HEIGHT_MAX_RETRACT_MM = 3.0;
+    private static final double AUTOMATIC_BOARD_HEIGHT_APPROACH_SPEED = 0.25;
     private static final double AUTOMATIC_BOARD_HEIGHT_PROBE_SPEED = 0.10;
     private static final double AUTOMATIC_BOARD_HEIGHT_RETRACT_SPEED = 0.10;
     private static final int AUTOMATIC_BOARD_HEIGHT_VACUUM_SETTLE_MS = 500;

@@ -36,12 +36,12 @@ public class PhotonFeederAutomaticSetup {
 
     private static final double MOVE_SPEED = 1.00;
 
-    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_Z_MM = 8.0;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_Z_MM = 8.5;
     private static final double AUTOMATIC_FEEDER_HEIGHT_PROBE_STEP_MM = 0.5;
     private static final double AUTOMATIC_FEEDER_HEIGHT_RETRACT_STEP_MM = 0.1;
-    private static final double AUTOMATIC_FEEDER_HEIGHT_MIN_Z_MM = 6.0;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_MIN_Z_MM = 5.0;
     private static final double AUTOMATIC_FEEDER_HEIGHT_MAX_RETRACT_MM = 2.0;
-    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_SPEED = 0.5;
+    private static final double AUTOMATIC_FEEDER_HEIGHT_APPROACH_SPEED = 0.25;
     private static final double AUTOMATIC_FEEDER_HEIGHT_PROBE_SPEED = 0.10;
     private static final double AUTOMATIC_FEEDER_HEIGHT_RETRACT_SPEED = 0.10;
     private static final int AUTOMATIC_FEEDER_HEIGHT_VACUUM_SETTLE_MS = 500;

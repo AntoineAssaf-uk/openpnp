@@ -21,7 +21,7 @@ import org.openpnp.spi.Nozzle;
 
 public class PhotonFeederCalibrationCsv {
     public static final Path CSV_PATH = Paths.get(
-            "C:\\Opulo\\Data\\Calibration\\OpenPnP Calibration Data Input.CSV");
+            "C:\\Opulo\\Data\\Calibration\\Photon Feeder Fiducial Data.CSV");
 
     private static final String KEY_PHOTON_FEEDER = "PhotonFeeder";
     private static final String KEY_SAVE_IMAGES = "Save Images";
