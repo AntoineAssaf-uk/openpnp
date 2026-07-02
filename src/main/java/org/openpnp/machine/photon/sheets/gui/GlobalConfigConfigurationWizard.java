@@ -12,6 +12,7 @@ import org.openpnp.machine.photon.PhotonFeeder;
 import org.openpnp.machine.photon.PhotonProperties;
 import org.openpnp.model.Configuration;
 import org.openpnp.util.UiUtils;
+import org.openpnp.machine.photon.PhotonFeederCalibrationCsv;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -21,8 +22,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard {
-    private static final DateTimeFormatter LOG_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter LOG_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final PhotonProperties photonProperties;
     private final FeederSearchProgressBar progressBarPanel;
@@ -42,7 +42,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
         searchPanel.setBorder(new TitledBorder(null, "Search",
                 TitledBorder.LEADING, TitledBorder.TOP, null, null));
         contentPanel.add(searchPanel);
-        searchPanel.setLayout(new FormLayout(new ColumnSpec[]{
+        searchPanel.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 FormSpecs.DEFAULT_COLSPEC,
                 FormSpecs.RELATED_GAP_COLSPEC,
@@ -54,7 +54,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("120dlu:grow"),
                 FormSpecs.RELATED_GAP_COLSPEC,
-        }, new RowSpec[]{
+        }, new RowSpec[] {
                 FormSpecs.RELATED_GAP_ROWSPEC,
                 FormSpecs.DEFAULT_ROWSPEC,
                 FormSpecs.RELATED_GAP_ROWSPEC,
@@ -166,8 +166,43 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
     private final Action automaticFeederSetupAction = new AbstractAction() {
         @Override
         public void actionPerformed(ActionEvent e) {
-            appendAutomaticFeederSetupLog(
-                    "Automatic feeder setup pressed. Implementation continues in Section 6.4.2.");
+            appendAutomaticFeederSetupLog("Automatic feeder setup CSV validation started.");
+
+            try {
+                PhotonFeederCalibrationCsv.CalibrationData calibrationData = PhotonFeederCalibrationCsv
+                        .readAndValidate();
+
+                appendAutomaticFeederSetupLog("CSV validation successful.");
+                appendAutomaticFeederSetupLog("CSV file: "
+                        + calibrationData.getCsvPath());
+                appendAutomaticFeederSetupLog("PhotonFeeder row: "
+                        + calibrationData.getPhotonFeederCsvLine());
+                appendAutomaticFeederSetupLog("Save Images row: "
+                        + calibrationData.getSaveImagesCsvLine());
+                appendAutomaticFeederSetupLog("Reference image: "
+                        + calibrationData.getReferenceImagePath());
+                appendAutomaticFeederSetupLog("Crop: "
+                        + calibrationData.getCrop());
+                appendAutomaticFeederSetupLog("Nozzle: "
+                        + calibrationData.getNozzleName());
+                appendAutomaticFeederSetupLog("Tentatives: "
+                        + calibrationData.getTentatives());
+                appendAutomaticFeederSetupLog(String.format(
+                        "Precision: %.3f um",
+                        calibrationData.getPrecisionUm()));
+                appendAutomaticFeederSetupLog("Save Images: "
+                        + (calibrationData.isSaveImages() ? "yes" : "no"));
+                appendAutomaticFeederSetupLog("Preserved CSV input lines: "
+                        + calibrationData.getPreservedInputLines().size());
+                appendAutomaticFeederSetupLog(
+                        "6.4.2 complete. No feeder search or machine motion was executed.");
+            } catch (Exception ex) {
+                appendAutomaticFeederSetupLog("CSV validation failed: " + ex.getMessage());
+                MessageBoxes.errorBox(
+                        MainFrame.get(),
+                        "Automatic feeder setup CSV error",
+                        ex);
+            }
         }
     };
 
