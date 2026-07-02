@@ -9,6 +9,9 @@ import java.util.List;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.awt.image.BufferedImage;
+
+import javax.imageio.ImageIO;
 
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -131,6 +134,24 @@ public class PhotonFeederCalibrationCsv {
                     "Invalid crop value %d at CSV line %d. Expected 1024, 512, or 256.",
                     crop,
                     photonFeederLine + 1));
+        }
+        
+        BufferedImage referenceImage = ImageIO.read(referenceImagePath.toFile());
+        if (referenceImage == null) {
+            throw new Exception("Unable to read reference image: " + referenceImagePath);
+        }
+
+        if (referenceImage.getWidth() != crop || referenceImage.getHeight() != crop) {
+            throw new Exception(String.format(
+                    "Reference image size does not match CSV crop value.%n%n"
+                            + "Reference image: %s%n"
+                            + "Image size: %d x %d%n"
+                            + "CSV crop: %d x %d",
+                    referenceImagePath,
+                    referenceImage.getWidth(),
+                    referenceImage.getHeight(),
+                    crop,
+                    crop));
         }
 
         int tentatives = parseInteger(tentativesText, "Tentatives", photonFeederLine);

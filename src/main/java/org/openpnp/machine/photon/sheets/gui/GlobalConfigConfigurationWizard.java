@@ -256,8 +256,16 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                 }
 
                                 appendAutomaticFeederSetupLog(String.format(
-                                                "6.4.8 running XY and Z setup for all valid Photon feeders. Processed feeders: %d.",
+                                                "6.4.9 running XY and Z setup for all valid Photon feeders. Processed feeders: %d.",
                                                 allFeedersResult.getProcessedFeederCount()));
+
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Setup parameters: crop=%d, nozzle=%s, tentatives=%d, precision=%.3f um, save images=%s.",
+                                                calibrationData.getCrop(),
+                                                calibrationData.getNozzleName(),
+                                                calibrationData.getTentatives(),
+                                                calibrationData.getPrecisionUm(),
+                                                calibrationData.isSaveImages() ? "yes" : "no"));
 
                                 if (allFeedersResult.getOutputFolder() != null) {
                                         appendAutomaticFeederSetupLog("Saved captured crops in: "
@@ -360,6 +368,14 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                                         "Configuration saved after successful feeder XY and Z corrections.");
                                 }
 
+                                appendAutomaticFeederSetupLog(String.format(
+                                                "Automatic feeder setup summary: feeders processed=%d, image measurements=%d, "
+                                                                + "XY corrections applied=%d, maximum final absolute XY error=%.3f um.",
+                                                allFeedersResult.getProcessedFeederCount(),
+                                                allFeedersResult.getTotalImageOffsetMeasurements(),
+                                                allFeedersResult.getTotalXyCorrectionsApplied(),
+                                                allFeedersResult.getMaximumFinalAbsErrorUm()));
+
                                 if (allFeedersResult.isCsvRewritten()) {
                                         appendAutomaticFeederSetupLog(String.format(
                                                         "Calibration CSV rewritten: %s",
@@ -371,11 +387,11 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
 
                                 if (allFeedersResult.isSuccess()) {
                                         appendAutomaticFeederSetupLog(
-                                                        "6.4.8 complete. All valid Photon feeders were corrected in XY and Z.");
+                                                        "6.4.9 complete. All valid Photon feeders were corrected in XY and Z.");
                                 } else {
                                         if (allFeedersResult.getFailedFeederSummary() != null) {
                                                 appendAutomaticFeederSetupLog(String.format(
-                                                                "6.4.8 stopped on Slot %d / hardware %s.",
+                                                                "6.4.9 stopped on Slot %d / hardware %s.",
                                                                 allFeedersResult.getFailedFeederSummary()
                                                                                 .getSlotAddress(),
                                                                 allFeedersResult.getFailedFeederSummary()
@@ -391,7 +407,7 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                                         }
 
                                         appendAutomaticFeederSetupLog(
-                                                        "6.4.8 failed. Calibration CSV was rewritten with the failed slot marked error.");
+                                                        "6.4.9 failed. Calibration CSV was rewritten with the failed slot marked error.");
 
                                         MessageBoxes.errorBox(
                                                         MainFrame.get(),

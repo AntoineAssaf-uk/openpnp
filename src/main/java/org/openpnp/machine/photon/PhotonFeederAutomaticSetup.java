@@ -870,6 +870,7 @@ public class PhotonFeederAutomaticSetup {
                 valid,
                 invalidReason);
     }
+
     public static class AllFeedersXyAndZCorrectionResult {
         private final SearchResult searchResult;
         private final List<FirstFeederXyAndZCorrectionResult> feederResults;
@@ -920,6 +921,45 @@ public class PhotonFeederAutomaticSetup {
             return feederResults.size();
         }
 
+        public int getTotalImageOffsetMeasurements() {
+            int total = 0;
+
+            for (FirstFeederXyAndZCorrectionResult feederResult : feederResults) {
+                total += feederResult.getXyCorrectionResult().getMeasurements().size();
+            }
+
+            return total;
+        }
+
+        public int getTotalXyCorrectionsApplied() {
+            int total = 0;
+
+            for (FirstFeederXyAndZCorrectionResult feederResult : feederResults) {
+                total += feederResult.getXyCorrectionResult().getCorrectionsApplied();
+            }
+
+            return total;
+        }
+
+        public double getMaximumFinalAbsErrorUm() {
+            double maximum = 0.0;
+
+            for (FirstFeederXyAndZCorrectionResult feederResult : feederResults) {
+                List<OffsetMeasurementResult> measurements = feederResult.getXyCorrectionResult().getMeasurements();
+
+                if (measurements.isEmpty()) {
+                    continue;
+                }
+
+                OffsetMeasurementResult finalMeasurement = measurements.get(measurements.size() - 1);
+
+                maximum = Math.max(maximum, Math.abs(finalMeasurement.getDxUm()));
+                maximum = Math.max(maximum, Math.abs(finalMeasurement.getDyUm()));
+            }
+
+            return maximum;
+        }
+
         public Path getOutputFolder() {
             return outputFolder;
         }
@@ -956,6 +996,7 @@ public class PhotonFeederAutomaticSetup {
             return issuedOnTimestamp;
         }
     }
+
     public static class FirstFeederXyAndZCorrectionResult {
         private final FirstFeederXyCorrectionResult xyCorrectionResult;
         private final FeederZProbeResult zProbeResult;
