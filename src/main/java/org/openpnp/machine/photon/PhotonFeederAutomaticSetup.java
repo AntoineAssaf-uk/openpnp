@@ -62,13 +62,71 @@ public class PhotonFeederAutomaticSetup {
             throw new Exception("No valid Photon feeders were found for automatic setup.");
         }
 
+        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
+
         OffsetMeasurementResult offsetMeasurementResult = measureFeederFiducialOffset(firstValidFeeder, calibrationData,
-                1);
+                1, outputFolder);
 
         return new FirstFeederOffsetMeasurementResult(
                 searchResult,
                 firstValidFeeder,
                 offsetMeasurementResult);
+    }
+
+    public static FirstFeederXyCorrectionResult searchAndCorrectFirstValidFeederXy(
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData,
+            PhotonFeeder.FeederSearchProgressConsumer progressUpdate) throws Exception {
+        if (calibrationData == null) {
+            throw new Exception("Calibration CSV data is null.");
+        }
+
+        SearchResult searchResult = searchAndCollectValidFeeders(progressUpdate);
+
+        FeederSummary firstValidFeeder = null;
+        for (FeederSummary feederSummary : searchResult.getFeederSummaries()) {
+            if (feederSummary.isValid()) {
+                firstValidFeeder = feederSummary;
+                break;
+            }
+        }
+
+        if (firstValidFeeder == null) {
+            throw new Exception("No valid Photon feeders were found for automatic setup.");
+        }
+
+        Path outputFolder = createOutputFolderIfNeeded(calibrationData);
+        List<OffsetMeasurementResult> measurements = new ArrayList<>();
+        int correctionsApplied = 0;
+        boolean success = false;
+
+        for (int tentative = 1; tentative <= calibrationData.getTentatives(); tentative++) {
+            OffsetMeasurementResult measurement = measureFeederFiducialOffset(
+                    firstValidFeeder,
+                    calibrationData,
+                    tentative,
+                    outputFolder);
+
+            measurements.add(measurement);
+
+            if (measurement.isWithinPrecision()) {
+                success = true;
+                break;
+            }
+
+            applyFeederSlotXyCorrection(firstValidFeeder, measurement);
+            correctionsApplied++;
+        }
+
+        Location finalSlotLocation = getCurrentSlotLocation(firstValidFeeder);
+
+        return new FirstFeederXyCorrectionResult(
+                searchResult,
+                firstValidFeeder,
+                measurements,
+                success,
+                correctionsApplied,
+                finalSlotLocation,
+                outputFolder);
     }
 
     public static SearchResult collectValidFeeders() {
@@ -112,7 +170,8 @@ public class PhotonFeederAutomaticSetup {
     private static OffsetMeasurementResult measureFeederFiducialOffset(
             FeederSummary feederSummary,
             PhotonFeederCalibrationCsv.CalibrationData calibrationData,
-            int tentative) throws Exception {
+            int tentative,
+            Path outputFolder) throws Exception {
         Machine machine = Configuration.get().getMachine();
         if (machine == null) {
             throw new Exception("No OpenPnP machine configuration is loaded.");
@@ -134,12 +193,8 @@ public class PhotonFeederAutomaticSetup {
             throw new Exception("Head " + HEAD_NAME + " does not have a default Top camera.");
         }
 
-        Location slotLocation = feederSummary.getSlotLocation();
-        if (slotLocation == null) {
-            throw new Exception("Slot location is null for slot " + feederSummary.getSlotAddress() + ".");
-        }
+        Location slotLocationMm = getCurrentSlotLocation(feederSummary);
 
-        Location slotLocationMm = slotLocation.convertToUnits(LengthUnit.Millimeters);
         Location cameraTargetLocation = new Location(
                 LengthUnit.Millimeters,
                 slotLocationMm.getX(),
@@ -188,13 +243,8 @@ public class PhotonFeederAutomaticSetup {
         double dyUm = dyMm * 1000.0;
 
         Path savedCropFile = null;
-        Path outputFolder = null;
 
-        if (calibrationData.isSaveImages()) {
-            String timestamp = LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP);
-            outputFolder = CALIBRATION_FOLDER.resolve(timestamp);
-            Files.createDirectories(outputFolder);
-
+        if (outputFolder != null) {
             savedCropFile = outputFolder.resolve(String.format(Locale.US,
                     "Slot_%d_Tentative_%d_Crop_%d.bmp",
                     feederSummary.getSlotAddress(),
@@ -224,6 +274,51 @@ public class PhotonFeederAutomaticSetup {
                 withinPrecision,
                 outputFolder,
                 savedCropFile);
+    }
+
+    private static Path createOutputFolderIfNeeded(
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData) throws Exception {
+        if (!calibrationData.isSaveImages()) {
+            return null;
+        }
+
+        String timestamp = LocalDateTime.now().format(OUTPUT_FOLDER_TIMESTAMP);
+        Path outputFolder = CALIBRATION_FOLDER.resolve(timestamp);
+        Files.createDirectories(outputFolder);
+        return outputFolder;
+    }
+
+    private static Location getCurrentSlotLocation(FeederSummary feederSummary) throws Exception {
+        if (feederSummary == null || feederSummary.getFeeder() == null) {
+            throw new Exception("Feeder summary is missing.");
+        }
+
+        if (feederSummary.getFeeder().getSlot() == null) {
+            throw new Exception("Slot object is missing for slot " + feederSummary.getSlotAddress() + ".");
+        }
+
+        Location slotLocation = feederSummary.getFeeder().getSlot().getLocation();
+        if (slotLocation == null) {
+            throw new Exception("Slot location is null for slot " + feederSummary.getSlotAddress() + ".");
+        }
+
+        return slotLocation.convertToUnits(LengthUnit.Millimeters);
+    }
+
+    private static Location applyFeederSlotXyCorrection(
+            FeederSummary feederSummary,
+            OffsetMeasurementResult measurement) throws Exception {
+        Location oldSlotLocation = getCurrentSlotLocation(feederSummary);
+
+        Location correctedSlotLocation = oldSlotLocation.derive(
+                oldSlotLocation.getX() + measurement.getDxMm(),
+                oldSlotLocation.getY() + measurement.getDyMm(),
+                null,
+                null);
+
+        feederSummary.getFeeder().getSlot().setLocation(correctedSlotLocation);
+
+        return correctedSlotLocation;
     }
 
     private static void saveBmp(BufferedImage image, Path file) throws Exception {
@@ -271,6 +366,61 @@ public class PhotonFeederAutomaticSetup {
                 slotLocation,
                 valid,
                 invalidReason);
+    }
+
+    public static class FirstFeederXyCorrectionResult {
+        private final SearchResult searchResult;
+        private final FeederSummary feederSummary;
+        private final List<OffsetMeasurementResult> measurements;
+        private final boolean success;
+        private final int correctionsApplied;
+        private final Location finalSlotLocation;
+        private final Path outputFolder;
+
+        private FirstFeederXyCorrectionResult(
+                SearchResult searchResult,
+                FeederSummary feederSummary,
+                List<OffsetMeasurementResult> measurements,
+                boolean success,
+                int correctionsApplied,
+                Location finalSlotLocation,
+                Path outputFolder) {
+            this.searchResult = searchResult;
+            this.feederSummary = feederSummary;
+            this.measurements = new ArrayList<>(measurements);
+            this.success = success;
+            this.correctionsApplied = correctionsApplied;
+            this.finalSlotLocation = finalSlotLocation;
+            this.outputFolder = outputFolder;
+        }
+
+        public SearchResult getSearchResult() {
+            return searchResult;
+        }
+
+        public FeederSummary getFeederSummary() {
+            return feederSummary;
+        }
+
+        public List<OffsetMeasurementResult> getMeasurements() {
+            return Collections.unmodifiableList(measurements);
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public int getCorrectionsApplied() {
+            return correctionsApplied;
+        }
+
+        public Location getFinalSlotLocation() {
+            return finalSlotLocation;
+        }
+
+        public Path getOutputFolder() {
+            return outputFolder;
+        }
     }
 
     public static class FirstFeederOffsetMeasurementResult {
