@@ -9,10 +9,11 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.machine.photon.PhotonFeeder;
+import org.openpnp.machine.photon.PhotonFeederAutomaticSetup;
+import org.openpnp.machine.photon.PhotonFeederCalibrationCsv;
 import org.openpnp.machine.photon.PhotonProperties;
 import org.openpnp.model.Configuration;
 import org.openpnp.util.UiUtils;
-import org.openpnp.machine.photon.PhotonFeederCalibrationCsv;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -168,9 +169,9 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
         public void actionPerformed(ActionEvent e) {
             appendAutomaticFeederSetupLog("Automatic feeder setup CSV validation started.");
 
+            PhotonFeederCalibrationCsv.CalibrationData calibrationData;
             try {
-                PhotonFeederCalibrationCsv.CalibrationData calibrationData = PhotonFeederCalibrationCsv
-                        .readAndValidate();
+                calibrationData = PhotonFeederCalibrationCsv.readAndValidate();
 
                 appendAutomaticFeederSetupLog("CSV validation successful.");
                 appendAutomaticFeederSetupLog("CSV file: "
@@ -194,15 +195,74 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
                         + (calibrationData.isSaveImages() ? "yes" : "no"));
                 appendAutomaticFeederSetupLog("Preserved CSV input lines: "
                         + calibrationData.getPreservedInputLines().size());
-                appendAutomaticFeederSetupLog(
-                        "6.4.2 complete. No feeder search or machine motion was executed.");
             } catch (Exception ex) {
                 appendAutomaticFeederSetupLog("CSV validation failed: " + ex.getMessage());
                 MessageBoxes.errorBox(
                         MainFrame.get(),
                         "Automatic feeder setup CSV error",
                         ex);
+                return;
             }
+
+            progressBarPanel.setVisible(true);
+            setSearchControlsEnabled(false);
+
+            int maxFeederAddress = photonProperties.getMaxFeederAddress();
+            progressBarPanel.setNumberOfElements(maxFeederAddress);
+
+            appendAutomaticFeederSetupLog(
+                    "Photon feeder search started. Maximum feeder address = "
+                            + maxFeederAddress + ".");
+
+            UiUtils.submitUiMachineTask(() -> {
+                return PhotonFeederAutomaticSetup.searchAndCollectValidFeeders(
+                        progressBarPanel::updateFeederState);
+            }, (searchResult) -> {
+                progressBarPanel.setVisible(false);
+                progressBarPanel.clearAllState();
+                setSearchControlsEnabled(true);
+
+                appendAutomaticFeederSetupLog("Photon feeder search completed.");
+                appendAutomaticFeederSetupLog(String.format(
+                        "Photon feeders listed: %d, valid for automatic setup: %d, invalid/skipped: %d.",
+                        searchResult.getTotalCount(),
+                        searchResult.getValidCount(),
+                        searchResult.getInvalidCount()));
+
+                for (PhotonFeederAutomaticSetup.FeederSummary feederSummary : searchResult.getFeederSummaries()) {
+                    if (feederSummary.isValid()) {
+                        appendAutomaticFeederSetupLog(String.format(
+                                "VALID  Slot %d  %s  Location X=%.3f Y=%.3f Z=%.3f",
+                                feederSummary.getSlotAddress(),
+                                feederSummary.getHardwareId(),
+                                feederSummary.getSlotLocation().getX(),
+                                feederSummary.getSlotLocation().getY(),
+                                feederSummary.getSlotLocation().getZ()));
+                    } else {
+                        appendAutomaticFeederSetupLog(String.format(
+                                "SKIP   Slot %s  %s  Reason: %s",
+                                feederSummary.getSlotAddress() == null
+                                        ? "None"
+                                        : feederSummary.getSlotAddress().toString(),
+                                feederSummary.getDisplayName(),
+                                feederSummary.getInvalidReason()));
+                    }
+                }
+
+                appendAutomaticFeederSetupLog(
+                        "6.4.3 complete. No machine motion or feeder update was executed.");
+            }, (throwable) -> {
+                progressBarPanel.setVisible(false);
+                progressBarPanel.clearAllState();
+                setSearchControlsEnabled(true);
+
+                appendAutomaticFeederSetupLog(
+                        "Photon feeder search failed: " + throwable.getMessage());
+                MessageBoxes.errorBox(
+                        MainFrame.get(),
+                        "Automatic feeder setup search error",
+                        throwable);
+            });
         }
     };
 
