@@ -7,7 +7,6 @@ import com.jgoodies.forms.layout.RowSpec;
 import org.jdesktop.beansbinding.AutoBinding.UpdateStrategy;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.AbstractConfigurationWizard;
-import org.openpnp.gui.support.JBindings;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.machine.photon.PhotonFeeder;
 import org.openpnp.machine.photon.PhotonProperties;
@@ -18,17 +17,20 @@ import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard {
+    private static final DateTimeFormatter LOG_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final PhotonProperties photonProperties;
-
     private final FeederSearchProgressBar progressBarPanel;
     private final JButton searchButton;
+    private final JButton automaticFeederSetupButton;
+    private final JButton eraseLogsButton;
     private final JSpinner maxFeederSpinner;
-    private final JButton btnStartFeedSlotsWizard;
-    private final JLabel lblNewLabel;
+    private final JTextArea automaticFeederSetupLogTextArea;
 
     /**
      * Create the panel.
@@ -37,30 +39,40 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
         photonProperties = new PhotonProperties(Configuration.get().getMachine());
 
         JPanel searchPanel = new JPanel();
-        searchPanel.setBorder(new TitledBorder(null, "Search", TitledBorder.LEADING, TitledBorder.TOP, null, null));
+        searchPanel.setBorder(new TitledBorder(null, "Search",
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         contentPanel.add(searchPanel);
         searchPanel.setLayout(new FormLayout(new ColumnSpec[]{
                 FormSpecs.RELATED_GAP_COLSPEC,
                 FormSpecs.DEFAULT_COLSPEC,
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("50dlu"),
-                ColumnSpec.decode("4dlu:grow"),
+                FormSpecs.RELATED_GAP_COLSPEC,
                 FormSpecs.DEFAULT_COLSPEC,
-                FormSpecs.RELATED_GAP_COLSPEC,},
-                new RowSpec[]{
-                        FormSpecs.RELATED_GAP_ROWSPEC,
-                        FormSpecs.DEFAULT_ROWSPEC,
-                        FormSpecs.RELATED_GAP_ROWSPEC,
-                        RowSpec.decode("10dlu"),
-                        FormSpecs.RELATED_GAP_ROWSPEC,}));
+                FormSpecs.RELATED_GAP_COLSPEC,
+                FormSpecs.DEFAULT_COLSPEC,
+                FormSpecs.RELATED_GAP_COLSPEC,
+                ColumnSpec.decode("120dlu:grow"),
+                FormSpecs.RELATED_GAP_COLSPEC,
+        }, new RowSpec[]{
+                FormSpecs.RELATED_GAP_ROWSPEC,
+                FormSpecs.DEFAULT_ROWSPEC,
+                FormSpecs.RELATED_GAP_ROWSPEC,
+                FormSpecs.DEFAULT_ROWSPEC,
+                FormSpecs.RELATED_GAP_ROWSPEC,
+                RowSpec.decode("90dlu:grow"),
+                FormSpecs.RELATED_GAP_ROWSPEC,
+        }));
 
         JLabel lblMaxFeeder = new JLabel("Maximum Feeder Address To Scan");
         searchPanel.add(lblMaxFeeder, "2, 2");
 
         int initialMaxFeederAddress = photonProperties.getMaxFeederAddress();
         SpinnerNumberModel maxFeederSpinnerModel = new SpinnerNumberModel(
-                initialMaxFeederAddress, 1, 254, 1
-        );
+                initialMaxFeederAddress,
+                1,
+                254,
+                1);
         maxFeederSpinner = new JSpinner(maxFeederSpinnerModel);
         searchPanel.add(maxFeederSpinner, "4, 2");
 
@@ -68,69 +80,78 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
         searchButton.addActionListener(searchAction);
         searchPanel.add(searchButton, "6, 2");
 
+        automaticFeederSetupButton = new JButton("Automatic feeder setup");
+        automaticFeederSetupButton.addActionListener(automaticFeederSetupAction);
+        searchPanel.add(automaticFeederSetupButton, "2, 4, 5, 1, fill, default");
+
+        eraseLogsButton = new JButton("Erase Logs");
+        eraseLogsButton.addActionListener(eraseLogsAction);
+        searchPanel.add(eraseLogsButton, "8, 4");
+
         progressBarPanel = new FeederSearchProgressBar();
-        searchPanel.add(progressBarPanel, "2, 4, 5, 1, fill, fill");
+        searchPanel.add(progressBarPanel, "8, 2, 3, 1, fill, fill");
         progressBarPanel.setVisible(false);
         progressBarPanel.setNumberOfElements(initialMaxFeederAddress);
 
-        JPanel programFeederSlotsPanel = new JPanel();
-        programFeederSlotsPanel.setBorder(new TitledBorder(null, "Program Feeder Slots", TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        contentPanel.add(programFeederSlotsPanel);
-        programFeederSlotsPanel.setLayout(new FormLayout(new ColumnSpec[]{
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("4dlu:grow"),
-                FormSpecs.RELATED_GAP_COLSPEC,
-                FormSpecs.DEFAULT_COLSPEC,
-                FormSpecs.RELATED_GAP_COLSPEC,},
-                new RowSpec[]{
-                        FormSpecs.RELATED_GAP_ROWSPEC,
-                        FormSpecs.DEFAULT_ROWSPEC,
-                        RowSpec.decode("6dlu:grow"),
-                        FormSpecs.DEFAULT_ROWSPEC,
-                        FormSpecs.RELATED_GAP_ROWSPEC,}));
+        automaticFeederSetupLogTextArea = new JTextArea();
+        automaticFeederSetupLogTextArea.setEditable(false);
+        automaticFeederSetupLogTextArea.setLineWrap(false);
+        automaticFeederSetupLogTextArea.setRows(8);
+        automaticFeederSetupLogTextArea.setFont(
+                new Font(Font.MONOSPACED, Font.PLAIN,
+                        automaticFeederSetupLogTextArea.getFont().getSize()));
 
-        lblNewLabel = new JLabel("If you've built your own slots and need to program them, use this wizard.");
-        programFeederSlotsPanel.add(lblNewLabel, "2, 2, 3, 1");
+        JScrollPane logScrollPane = new JScrollPane(automaticFeederSetupLogTextArea);
+        logScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+        logScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        searchPanel.add(logScrollPane, "2, 6, 9, 1, fill, fill");
 
-        btnStartFeedSlotsWizard = new JButton("Start Wizard");
-        btnStartFeedSlotsWizard.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                if(! Configuration.get().getMachine().isEnabled()) {
-                    UiUtils.showError(new Exception("Please connect to the machine before running this wizard."));
-                    return;
-                }
-
-                ProgramFeederSlotWizard wizard = new ProgramFeederSlotWizard();
-                wizard.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-                wizard.setVisible(true);
-            }
-        });
-        programFeederSlotsPanel.add(btnStartFeedSlotsWizard, "4, 4");
+        appendAutomaticFeederSetupLog("Automatic feeder setup log ready.");
     }
 
     @Override
     public void createBindings() {
-        bind(UpdateStrategy.READ_WRITE, photonProperties, "maxFeederAddress", maxFeederSpinner, "value");
+        bind(UpdateStrategy.READ_WRITE,
+                photonProperties,
+                "maxFeederAddress",
+                maxFeederSpinner,
+                "value");
+    }
+
+    private void appendAutomaticFeederSetupLog(String message) {
+        String timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT);
+        automaticFeederSetupLogTextArea.append(timestamp + "  " + message + System.lineSeparator());
+        automaticFeederSetupLogTextArea.setCaretPosition(
+                automaticFeederSetupLogTextArea.getDocument().getLength());
+    }
+
+    private void setSearchControlsEnabled(boolean enabled) {
+        searchButton.setEnabled(enabled);
+        automaticFeederSetupButton.setEnabled(enabled);
+        maxFeederSpinner.setEnabled(enabled);
     }
 
     private final Action searchAction = new AbstractAction() {
         @Override
         public void actionPerformed(ActionEvent e) {
             progressBarPanel.setVisible(true);
-            searchButton.setEnabled(false);
-            maxFeederSpinner.setEnabled(false);
+            setSearchControlsEnabled(false);
 
             int maxFeederAddress = photonProperties.getMaxFeederAddress();
             progressBarPanel.setNumberOfElements(maxFeederAddress);
+
+            appendAutomaticFeederSetupLog(
+                    "Search started. Maximum feeder address = " + maxFeederAddress + ".");
 
             UiUtils.submitUiMachineTask(() -> {
                 PhotonFeeder.findAllFeeders(progressBarPanel::updateFeederState);
                 return null;
             }, (parameter) -> {
                 resetState();
+                appendAutomaticFeederSetupLog("Search completed.");
             }, (throwable) -> {
                 resetState();
-
+                appendAutomaticFeederSetupLog("Search failed: " + throwable.getMessage());
                 MessageBoxes.errorBox(MainFrame.get(), "Error", throwable);
             });
         }
@@ -138,8 +159,23 @@ public class GlobalConfigConfigurationWizard extends AbstractConfigurationWizard
         private void resetState() {
             progressBarPanel.setVisible(false);
             progressBarPanel.clearAllState();
-            searchButton.setEnabled(true);
-            maxFeederSpinner.setEnabled(true);
+            setSearchControlsEnabled(true);
+        }
+    };
+
+    private final Action automaticFeederSetupAction = new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            appendAutomaticFeederSetupLog(
+                    "Automatic feeder setup pressed. Implementation continues in Section 6.4.2.");
+        }
+    };
+
+    private final Action eraseLogsAction = new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            automaticFeederSetupLogTextArea.setText("");
+            appendAutomaticFeederSetupLog("Automatic feeder setup log erased.");
         }
     };
 }
