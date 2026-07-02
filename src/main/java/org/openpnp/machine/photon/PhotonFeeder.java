@@ -465,15 +465,15 @@ public class PhotonFeeder extends ReferenceFeeder {
         return tenths;
     }
 
-public void setPartPitch(double partPitch) {
-    double oldValue = this.partPitch;
-    this.partPitch = floorToOneDecimal(partPitch);
-    firePropertyChange("partPitch", oldValue, this.partPitch);
-}
+    public void setPartPitch(double partPitch) {
+        double oldValue = this.partPitch;
+        this.partPitch = floorToOneDecimal(partPitch);
+        firePropertyChange("partPitch", oldValue, this.partPitch);
+    }
 
-public double getPartPitch() {
-    return partPitch;
-}
+    public double getPartPitch() {
+        return partPitch;
+    }
 
     public static PhotonFeeder findByHardwareId(String hardwareId) {
         for (Feeder feeder : Configuration.get().getMachine().getFeeders()) {
